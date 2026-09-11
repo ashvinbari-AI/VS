@@ -1,0 +1,41 @@
+# Facebook scraper (fb_scraper.py) -- Playwright, driving your system's real
+# Chrome (CHROME_CHANNEL = "chrome" in fb_scraper.py), not a bundled Chromium.
+playwright==1.60.0
+
+# Instagram scraper (ig_scraper.py) -- Selenium + auto-managed chromedriver.
+selenium==4.46.0
+webdriver-manager==4.1.2
+
+# Optional: only needed for `ig_scraper.py scrape --excel out.xlsx`.
+pandas==2.3.3
+openpyxl==3.1.5
+
+# Optional: only needed for `fb_scraper.py scrape --mongo-uri ...` / `mongo-load`.
+pymongo==4.15.0
+
+# Political Person Social Media Intelligence -- backend
+# Existing Instagram/Facebook scrapers keep their own separate requirements
+# (see ../requirements.txt) -- this file is for the FastAPI platform only.
+
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.4
+pydantic-settings==2.7.0
+pandas==2.3.3
+pyarrow==18.1.0
+python-dotenv==1.0.1
+
+# Optional -- only imported when GEMINI_API_KEY is set. The app must run
+# fully in LOCAL ANALYSIS MODE without this installed.
+google-generativeai==0.8.3
+
+# Optional -- local, fully-offline sentiment classification (see
+# SENTIMENT_MODEL / MARATHI_SENTIMENT_MODEL in .env.example). Heavy: torch
+# alone is a multi-hundred-MB download, plus each model's own weights on
+# first use. The app must keep running in LOCAL ANALYSIS MODE (the
+# zero-dependency keyword lexicon) without these installed.
+transformers==4.47.1
+torch==2.5.1
+
+pytest==8.3.4
+httpx==0.28.1

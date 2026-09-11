@@ -1,0 +1,25 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+backend/.venv/
+.pytest_cache/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+
+# Scraper sessions (browser profiles / cookies -- never share these)
+fb_session/
+ig_session/
+
+# App data (raw scraped evidence, processed parquet, logs) -- local-only,
+# never committed. Keep the folder structure with .gitkeep if needed.
+data/raw/
+data/processed/
+data/analysis/
+data/mock/
+logs/
+output/
