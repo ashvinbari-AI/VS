@@ -24,10 +24,14 @@ def _person_kpis(df, comments_df, followers) -> dict:
         "photos": type_dist.get("photo", 0),
         "average_likes": eng.calculate_average_likes(df),
         "median_likes": eng.calculate_median_likes(df),
+        "total_likes": eng.calculate_sum_likes(df),
         "average_comments": eng.calculate_average_comments(df),
         "median_comments": eng.calculate_median_comments(df),
+        "total_comments_count": eng.calculate_sum_comments(df),
         "average_engagement": eng.calculate_average_engagement(df),
+        "total_engagement": eng.calculate_sum_engagement(df),
         "engagement_rate": eng.calculate_engagement_rate(df, followers),
+        "view_engagement": eng.calculate_sum_views(df[df["content_type"].isin(["post", "reel"])]) if not df.empty else None,
         "total_comments": int(len(comments_df)) if comments_df is not None else None,
     }
 
@@ -95,19 +99,19 @@ def get_overview(
         "person_b": eng.calculate_content_type_distribution(df_b),
     }
 
-    # 5. Engagement comparison (grouped bar: avg likes/comments/shares/engagement)
+    # 5. Engagement comparison (grouped bar: total likes/comments/shares/engagement)
     engagement_comparison = {
         "person_a": {
-            "avg_likes": eng.calculate_average_likes(df_a),
-            "avg_comments": eng.calculate_average_comments(df_a),
-            "avg_shares": eng.calculate_average_shares(df_a),
-            "avg_engagement": eng.calculate_average_engagement(df_a),
+            "total_likes": eng.calculate_sum_likes(df_a),
+            "total_comments": eng.calculate_sum_comments(df_a),
+            "total_shares": eng.calculate_sum_shares(df_a),
+            "total_engagement": eng.calculate_sum_engagement(df_a),
         },
         "person_b": {
-            "avg_likes": eng.calculate_average_likes(df_b),
-            "avg_comments": eng.calculate_average_comments(df_b),
-            "avg_shares": eng.calculate_average_shares(df_b),
-            "avg_engagement": eng.calculate_average_engagement(df_b),
+            "total_likes": eng.calculate_sum_likes(df_b),
+            "total_comments": eng.calculate_sum_comments(df_b),
+            "total_shares": eng.calculate_sum_shares(df_b),
+            "total_engagement": eng.calculate_sum_engagement(df_b),
         },
     }
 

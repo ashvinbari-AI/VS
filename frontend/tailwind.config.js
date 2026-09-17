@@ -1,5 +1,9 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  // Class-based (not 'media'/prefers-color-scheme): driven by the user's
+  // own Settings > Theme choice (see src/utils/themeStore.ts), which
+  // toggles a `dark` class on <html> -- not the OS setting.
+  darkMode: "class",
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {

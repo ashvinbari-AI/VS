@@ -23,3 +23,11 @@ data/analysis/
 data/mock/
 logs/
 output/
+
+# Evaluation run output -- regenerable via `python -m evaluation.run`.
+# Ground truth, config, and code are NOT ignored: those are the actual
+# evaluation system, not its output.
+evaluation/reports/*.json
+evaluation/reports/*.csv
+evaluation/regression/baseline/*.json
+evaluation/regression/current/*.json

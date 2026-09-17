@@ -87,3 +87,24 @@ def test_pipeline_exception_is_caught(monkeypatch):
 
     monkeypatch.setattr(local_sentiment, "_get_pipeline", lambda model_name: raising_pipe)
     assert local_sentiment.classify("some text") is None
+
+
+def test_get_pipeline_survives_a_torch_dll_load_failure(monkeypatch):
+    """Regression: `transformers` imports torch at its own top level, so a
+    native-extension failure (a torch DLL load error on Windows, e.g.
+    WinError 1114) surfaces as OSError, not ImportError -- catching only
+    ImportError around the `from transformers import pipeline` line would
+    let this escape and crash the whole analysis job instead of falling
+    back to the lexicon."""
+    import builtins
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "transformers":
+            raise OSError("[WinError 1114] A dynamic link library (DLL) initialization "
+                           "routine failed. Error loading \"...\\torch\\lib\\c10.dll\"")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    local_sentiment._pipeline_cache.pop("fake/broken-model", None)
+    assert local_sentiment._get_pipeline("fake/broken-model") is None

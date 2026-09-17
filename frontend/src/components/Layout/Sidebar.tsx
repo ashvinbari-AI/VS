@@ -1,6 +1,7 @@
 import {
   Activity, BarChart3, Users, MessageSquare, FileText, Compass,
-  Clock, Database, Settings as SettingsIcon, TrendingUp, Smile, Search, Shield,
+  Clock, Database, Settings as SettingsIcon, TrendingUp, Smile, Search, Shield, ClipboardCheck,
+  FileBarChart,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useApi } from "../../hooks/useApi";
@@ -8,6 +9,7 @@ import { api } from "../../services/api";
 
 const NAV = [
   { to: "/overview", label: "Overview", icon: BarChart3 },
+  { to: "/report", label: "Report", icon: FileBarChart },
   { to: "/comparison", label: "Profile Comparison", icon: Users },
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/engagement", label: "Engagement", icon: TrendingUp },
@@ -18,6 +20,7 @@ const NAV = [
   { to: "/timeline", label: "Timeline", icon: Clock },
   { to: "/explorer", label: "Content Explorer", icon: Search },
   { to: "/data-sources", label: "Data Sources", icon: Database },
+  { to: "/evaluation", label: "Evaluation", icon: ClipboardCheck },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 

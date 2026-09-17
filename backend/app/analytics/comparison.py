@@ -30,15 +30,11 @@ METRIC_REGISTRY: list[MetricSpec] = [
     MetricSpec("posts", "Posts", "higher_better"),
     MetricSpec("reels", "Reels", "higher_better"),
     MetricSpec("videos", "Videos", "higher_better"),
-    MetricSpec("average_likes", "Average Likes", "higher_better"),
-    MetricSpec("median_likes", "Median Likes", "higher_better"),
-    MetricSpec("average_comments", "Average Comments", "higher_better"),
-    MetricSpec("median_comments", "Median Comments", "higher_better"),
-    MetricSpec("average_engagement", "Average Engagement", "higher_better"),
-    MetricSpec("median_engagement", "Median Engagement", "higher_better"),
+    MetricSpec("total_likes", "Total Likes", "higher_better"),
+    MetricSpec("total_comments", "Total Comments", "higher_better"),
+    MetricSpec("total_engagement", "Total Engagement", "higher_better"),
     MetricSpec("engagement_rate", "Engagement Rate", "higher_better"),
     MetricSpec("posting_frequency_per_day", "Posting Frequency (per day)", "neutral"),
-    MetricSpec("active_days", "Active Days", "higher_better"),
     MetricSpec("peak_posting_hour", "Peak Posting Hour", "neutral"),
     MetricSpec("longest_inactive_period_days", "Longest Inactive Period (days)", "neutral"),
 ]
@@ -66,12 +62,17 @@ def build_person_metrics(df, comments_df, followers: int | None, period_days: in
         "posts": type_dist.get("post", 0),
         "reels": type_dist.get("reel", 0),
         "videos": type_dist.get("video", 0),
-        "average_likes": eng.calculate_average_likes(df),
-        "median_likes": eng.calculate_median_likes(df),
-        "average_comments": eng.calculate_average_comments(df),
-        "median_comments": eng.calculate_median_comments(df),
+        "total_likes": eng.calculate_sum_likes(df),
+        "total_comments": eng.calculate_sum_comments(df),
+        "total_engagement": eng.calculate_sum_engagement(df),
+        # Not in METRIC_REGISTRY (the comparison table shows totals, not
+        # these) -- kept for the Normalized Analytics Index radar below,
+        # which wants per-post averages for its "Engagement"/"Comment
+        # response" dimensions (a account that just posts more shouldn't
+        # look more "engaging" there -- that's what "Content volume"
+        # already measures).
         "average_engagement": eng.calculate_average_engagement(df),
-        "median_engagement": eng.calculate_median_engagement(df),
+        "average_comments": eng.calculate_average_comments(df),
         "engagement_rate": eng.calculate_engagement_rate(df, followers),
         "posting_frequency_per_day": freq["per_day"],
         "active_days": eng.calculate_active_days(df),

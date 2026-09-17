@@ -194,7 +194,7 @@ cd backend
 Then in `.env`:
 ```
 SENTIMENT_MODEL=cardiffnlp/twitter-xlm-roberta-base-sentiment
-MARATHI_SENTIMENT_MODEL=l3cube-pune/marathi-sentiment-md
+MARATHI_SENTIMENT_MODEL=l3cube-pune/marathi-sentiment-political-tweets
 ```
 Restart the backend. Devanagari-script text (Marathi) is routed to
 `MARATHI_SENTIMENT_MODEL`; everything else (English, transliterated text)
@@ -249,9 +249,32 @@ data/
   mock/                             DEMO MODE data only
   configs/                          people/*.json, settings.json
 
+evaluation/                         independent evaluation/validation layer -- see evaluation/README.md
+  ground_truth/, datasets/, evaluators/, metrics/, tests/, reports/,
+  regression/, annotations/, config/, run.py
+
 logs/                                backend.log, scraper.log, analysis.log
 start_all.py
 ```
+
+## 8a. Evaluation & validation
+
+A separate `evaluation/` package (own README at `evaluation/README.md`)
+tests this app's real analytics/NLP output against manually verified
+ground truth — data completeness, field accuracy, engagement/activity
+arithmetic, comparison-engine logic, and sentiment/narrative/theme/issue
+classification (precision/recall/F1, confusion matrices), plus regression
+tracking against a saved baseline. It never modifies scraper logic,
+analytics, or the dashboard — it only reads their output.
+
+```powershell
+backend\.venv\Scripts\python.exe -m evaluation.run
+```
+Ground truth starts empty (nothing here is auto-generated from scraped
+data) — see `evaluation/ground_truth/README.md` for how to add manually
+verified records. Full scope of what's built vs. still planned (a React
+dashboard and FastAPI endpoints for it are not built yet) is in
+`evaluation/README.md`.
 
 ## 9. Troubleshooting
 

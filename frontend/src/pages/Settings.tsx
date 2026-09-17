@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../services/api";
+import { DATE_FORMAT_PRESETS, setDateFormat } from "../utils/dateFormat";
+import { applyTheme } from "../utils/themeStore";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<any>(null);
@@ -11,6 +13,11 @@ export default function SettingsPage() {
   const update = async (patch: Record<string, unknown>) => {
     const updated = await api.put<any>("/settings", patch);
     setSettings(updated);
+    // Takes effect immediately, app-wide -- see utils/dateFormat.ts. Every
+    // date already on screen re-renders with the new pattern on next
+    // paint, no reload needed.
+    if (typeof patch.date_format === "string") setDateFormat(patch.date_format);
+    if (typeof patch.theme === "string") applyTheme(patch.theme);
   };
 
   const loadDemo = async () => {
@@ -67,7 +74,14 @@ export default function SettingsPage() {
 
       <Section title="Display">
         <Row label="Data directory"><span className="text-sm text-dark/60">{settings.data_directory}</span></Row>
-        <Row label="Date format"><span className="text-sm">{settings.date_format}</span></Row>
+        <Row label="Date format">
+          <select className="rounded-md border border-silver/70 px-2 py-1 text-sm" value={settings.date_format}
+            onChange={(e) => update({ date_format: e.target.value })}>
+            {DATE_FORMAT_PRESETS.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </Row>
         <Row label="Theme">
           <select className="rounded-md border border-silver/70 px-2 py-1 text-sm" value={settings.theme}
             onChange={(e) => update({ theme: e.target.value })}>

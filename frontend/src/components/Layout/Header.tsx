@@ -4,6 +4,7 @@ import { useFilters } from "../../state/FilterContext";
 import type { PersonConfig } from "../../types/api";
 
 const PERIODS = [
+  { label: "1 Day", days: 1 },
   { label: "7 Days", days: 7 },
   { label: "30 Days", days: 30 },
   { label: "90 Days", days: 90 },
@@ -20,20 +21,20 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-10 border-b border-silver/70 bg-white/90 px-6 py-3 backdrop-blur-md">
+    <header className="sticky top-0 z-10 border-b border-silver/70 bg-white/90 px-6 py-3 backdrop-blur-md dark:border-navy-700/70 dark:bg-navy-900/90">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-dark/40">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-dark/40 dark:text-silver/50">
             Political Person Comparison
           </div>
-          <div className="flex items-center gap-2 text-sm font-bold text-navy">
+          <div className="flex items-center gap-2 text-sm font-bold text-navy dark:text-white">
             <PersonSelect
               value={filters.personA}
               onChange={(v) => setFilters({ personA: v })}
               people={people ?? []}
               placeholder="Select Person A"
             />
-            <span className="rounded-full bg-silver/50 px-2 py-0.5 text-[10px] font-bold text-dark/40">VS</span>
+            <span className="rounded-full bg-silver/50 px-2 py-0.5 text-[10px] font-bold text-dark/40 dark:bg-navy-700/60 dark:text-silver/60">VS</span>
             <PersonSelect
               value={filters.personB}
               onChange={(v) => setFilters({ personB: v })}
@@ -83,7 +84,7 @@ function FilterSelect({
 }: { value: string | number; onChange: (v: string) => void; children: React.ReactNode }) {
   return (
     <select
-      className="rounded-lg border border-silver bg-white px-2.5 py-1.5 text-xs font-medium text-dark/80 shadow-sm transition-colors hover:border-navy-300 focus:border-navy-400"
+      className="rounded-lg border border-silver bg-white px-2.5 py-1.5 text-xs font-medium text-dark/80 shadow-sm transition-colors hover:border-navy-300 focus:border-navy-400 dark:border-navy-600 dark:bg-navy-800 dark:text-silver dark:hover:border-navy-400"
       value={value}
       onChange={(e) => onChange(e.target.value)}
     >
@@ -97,7 +98,7 @@ function PersonSelect({
 }: { value: string; onChange: (v: string) => void; people: PersonConfig[]; placeholder: string }) {
   return (
     <select
-      className="max-w-[180px] truncate rounded-lg border border-silver bg-white px-2 py-1 text-sm font-semibold text-navy shadow-sm transition-colors hover:border-navy-300 focus:border-navy-400"
+      className="max-w-[180px] truncate rounded-lg border border-silver bg-white px-2 py-1 text-sm font-semibold text-navy shadow-sm transition-colors hover:border-navy-300 focus:border-navy-400 dark:border-navy-600 dark:bg-navy-800 dark:text-white dark:hover:border-navy-400"
       value={value}
       onChange={(e) => onChange(e.target.value)}
     >

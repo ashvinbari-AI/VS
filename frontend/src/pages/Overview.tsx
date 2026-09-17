@@ -1,19 +1,21 @@
+import { useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
-  Users, FileText, Image, Clapperboard, Heart, MessageCircle, Percent, Flame, Trophy,
+  Users, FileText, Image, Clapperboard, Heart, MessageCircle, Eye, Flame, Trophy,
 } from "lucide-react";
 import { AsyncBoundary } from "../components/Loading/AsyncBoundary";
 import { KpiCompareCard } from "../components/KPI/KpiCompareCard";
 import { ChartCard } from "../components/Charts/ChartCard";
 import { SelectPeoplePrompt } from "../components/EmptyState/SelectPeoplePrompt";
 import { DataTable } from "../components/Tables/DataTable";
+import { ProofDrawer, type ProofRequest } from "../components/Proof/ProofDrawer";
 import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
 import { useFilters } from "../state/FilterContext";
-import { fmtCompact, fmtDate, fmtNum, fmtPct } from "../utils/format";
+import { fmtCompact, fmtDate, fmtNum } from "../utils/format";
 import { COLOR_GRID, COLOR_PRIMARY, COLOR_SECONDARY } from "../utils/theme";
 
 const COLOR_A = COLOR_PRIMARY;
@@ -50,26 +52,42 @@ export default function Overview() {
 
   return (
     <AsyncBoundary loading={loading} error={error} onRetry={reload}>
-      {data && <OverviewBody data={data} nameA={personAName} nameB={personBName} />}
+      {data && (
+        <OverviewBody
+          data={data} nameA={personAName} nameB={personBName}
+          idA={filters.personA} idB={filters.personB}
+          proofFilters={{ platform: filters.platform, contentType: filters.contentType, dateFrom: filters.dateFrom ?? undefined }}
+        />
+      )}
     </AsyncBoundary>
   );
 }
 
-function OverviewBody({ data, nameA, nameB }: { data: OverviewResponse; nameA: string; nameB: string }) {
+function OverviewBody({
+  data, nameA, nameB, idA, idB, proofFilters,
+}: {
+  data: OverviewResponse; nameA: string; nameB: string; idA: string; idB: string;
+  proofFilters: { platform?: string; contentType?: string; dateFrom?: string };
+}) {
   const a = data.kpis.person_a;
   const b = data.kpis.person_b;
+  const [proof, setProof] = useState<ProofRequest | null>(null);
+
+  const openProof = (metric: string, label: string) => () =>
+    setProof({ personAId: idA, personAName: nameA, personBId: idB, personBName: nameB, metric, label, ...proofFilters });
 
   return (
     <div className="space-y-6">
+      <ProofDrawer request={proof} onClose={() => setProof(null)} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCompareCard icon={Users} label="Followers" valueA={fmtCompact(a.followers)} valueB={fmtCompact(b.followers)} labelA={nameA} labelB={nameB} />
-        <KpiCompareCard icon={FileText} label="Total Content" valueA={fmtNum(a.total_content)} valueB={fmtNum(b.total_content)} labelA={nameA} labelB={nameB} />
-        <KpiCompareCard icon={Image} label="Posts" valueA={fmtNum(a.posts)} valueB={fmtNum(b.posts)} labelA={nameA} labelB={nameB} />
-        <KpiCompareCard icon={Clapperboard} label="Reels" valueA={fmtNum(a.reels)} valueB={fmtNum(b.reels)} labelA={nameA} labelB={nameB} />
-        <KpiCompareCard icon={Heart} label="Avg Likes" valueA={fmtCompact(a.average_likes)} valueB={fmtCompact(b.average_likes)} labelA={nameA} labelB={nameB} />
-        <KpiCompareCard icon={MessageCircle} label="Avg Comments" valueA={fmtCompact(a.average_comments)} valueB={fmtCompact(b.average_comments)} labelA={nameA} labelB={nameB} />
-        <KpiCompareCard icon={Percent} label="Engagement Rate" valueA={fmtPct(a.engagement_rate)} valueB={fmtPct(b.engagement_rate)} labelA={nameA} labelB={nameB} sublabel="engagement / followers" />
-        <KpiCompareCard icon={Flame} label="Avg Engagement" valueA={fmtCompact(a.average_engagement)} valueB={fmtCompact(b.average_engagement)} labelA={nameA} labelB={nameB} />
+        <KpiCompareCard icon={Users} label="Followers" valueA={fmtCompact(a.followers)} valueB={fmtCompact(b.followers)} labelA={nameA} labelB={nameB} onProof={openProof("followers", "Followers")} />
+        <KpiCompareCard icon={FileText} label="Total Content" valueA={fmtNum(a.total_content)} valueB={fmtNum(b.total_content)} labelA={nameA} labelB={nameB} onProof={openProof("total_content", "Total Content")} />
+        <KpiCompareCard icon={Image} label="Posts" valueA={fmtNum(a.posts)} valueB={fmtNum(b.posts)} labelA={nameA} labelB={nameB} onProof={openProof("posts", "Posts")} />
+        <KpiCompareCard icon={Clapperboard} label="Reels" valueA={fmtNum(a.reels)} valueB={fmtNum(b.reels)} labelA={nameA} labelB={nameB} onProof={openProof("reels", "Reels")} />
+        <KpiCompareCard icon={Heart} label="Total Likes" valueA={fmtNum(a.total_likes)} valueB={fmtNum(b.total_likes)} labelA={nameA} labelB={nameB} onProof={openProof("total_likes", "Total Likes")} />
+        <KpiCompareCard icon={MessageCircle} label="Total Comments" valueA={fmtNum(a.total_comments_count)} valueB={fmtNum(b.total_comments_count)} labelA={nameA} labelB={nameB} onProof={openProof("total_comments_count", "Total Comments")} />
+        <KpiCompareCard icon={Eye} label="View Engagement" valueA={fmtNum(a.view_engagement)} valueB={fmtNum(b.view_engagement)} labelA={nameA} labelB={nameB} sublabel="post + reel views" onProof={openProof("view_engagement", "View Engagement")} />
+        <KpiCompareCard icon={Flame} label="Total Engagement" valueA={fmtNum(a.total_engagement)} valueB={fmtNum(b.total_engagement)} labelA={nameA} labelB={nameB} onProof={openProof("total_engagement", "Total Engagement")} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -140,14 +158,15 @@ function OverviewBody({ data, nameA, nameB }: { data: OverviewResponse; nameA: s
         <DataTable
           rows={data.charts.top_content}
           keyFn={(r) => r.content_id}
+          defaultSortKey="engagement"
           columns={[
-            { key: "person", header: "Person", render: (r) => r.person_name },
-            { key: "platform", header: "Platform", render: (r) => <span className="capitalize">{r.platform}</span> },
-            { key: "type", header: "Type", render: (r) => <span className="capitalize">{r.content_type}</span> },
-            { key: "date", header: "Date", render: (r) => fmtDate(r.published_at) },
-            { key: "likes", header: "Likes", render: (r) => fmtNum(r.likes), align: "right" },
-            { key: "comments", header: "Comments", render: (r) => fmtNum(r.comments_count), align: "right" },
-            { key: "engagement", header: "Engagement", render: (r) => fmtNum(r.engagement), align: "right" },
+            { key: "person", header: "Person", render: (r) => r.person_name, sortable: true, sortValue: (r) => r.person_name },
+            { key: "platform", header: "Platform", render: (r) => <span className="capitalize">{r.platform}</span>, sortable: true, sortValue: (r) => r.platform },
+            { key: "type", header: "Type", render: (r) => <span className="capitalize">{r.content_type}</span>, sortable: true, sortValue: (r) => r.content_type },
+            { key: "date", header: "Date", render: (r) => fmtDate(r.published_at), sortable: true, sortValue: (r) => r.published_at },
+            { key: "likes", header: "Likes", render: (r) => fmtNum(r.likes), align: "right", sortable: true, sortValue: (r) => r.likes },
+            { key: "comments", header: "Comments", render: (r) => fmtNum(r.comments_count), align: "right", sortable: true, sortValue: (r) => r.comments_count },
+            { key: "engagement", header: "Engagement", render: (r) => fmtNum(r.engagement), align: "right", sortable: true, sortValue: (r) => r.engagement },
           ]}
         />
       </div>
@@ -164,7 +183,7 @@ function mergeDist(dist: { person_a: Record<string, number>; person_b: Record<st
 
 function engagementComparisonRows(cmp: { person_a: Record<string, number | null>; person_b: Record<string, number | null> }) {
   const labels: Record<string, string> = {
-    avg_likes: "Avg Likes", avg_comments: "Avg Comments", avg_shares: "Avg Shares", avg_engagement: "Avg Engagement",
+    total_likes: "Total Likes", total_comments: "Total Comments", total_shares: "Total Shares", total_engagement: "Total Engagement",
   };
   return Object.keys(labels).map((k) => ({
     metric: labels[k], person_a: cmp.person_a?.[k] ?? 0, person_b: cmp.person_b?.[k] ?? 0,

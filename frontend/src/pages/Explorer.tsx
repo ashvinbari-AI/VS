@@ -67,17 +67,18 @@ export default function Explorer() {
           rows={data?.items ?? []}
           keyFn={(r) => r.content_id}
           onRowClick={(r) => setSelected(r.content_id)}
+          defaultSortKey="date"
           columns={[
-            { key: "date", header: "Date", render: (r) => fmtDate(r.published_at) },
-            { key: "person", header: "Person", render: (r) => r.person_name },
-            { key: "platform", header: "Platform", render: (r) => <span className="capitalize">{r.platform}</span> },
-            { key: "type", header: "Type", render: (r) => <span className="capitalize">{r.content_type}</span> },
+            { key: "date", header: "Date", render: (r) => fmtDate(r.published_at), sortable: true, sortValue: (r) => r.published_at },
+            { key: "person", header: "Person", render: (r) => r.person_name, sortable: true, sortValue: (r) => r.person_name },
+            { key: "platform", header: "Platform", render: (r) => <span className="capitalize">{r.platform}</span>, sortable: true, sortValue: (r) => r.platform },
+            { key: "type", header: "Type", render: (r) => <span className="capitalize">{r.content_type}</span>, sortable: true, sortValue: (r) => r.content_type },
             { key: "caption", header: "Caption", render: (r) => <span className="line-clamp-1 max-w-sm">{r.caption || "N/A"}</span> },
-            { key: "likes", header: "Likes", render: (r) => fmtNum(r.likes), align: "right" },
-            { key: "comments", header: "Comments", render: (r) => fmtNum(r.comments_count), align: "right" },
-            { key: "engagement", header: "Engagement", render: (r) => fmtNum(r.engagement), align: "right" },
-            { key: "narrative", header: "Narrative", render: (r) => r.narrative ?? "—" },
-            { key: "sentiment", header: "Sentiment", render: (r) => r.sentiment ?? "—" },
+            { key: "likes", header: "Likes", render: (r) => fmtNum(r.likes), align: "right", sortable: true, sortValue: (r) => r.likes },
+            { key: "comments", header: "Comments", render: (r) => fmtNum(r.comments_count), align: "right", sortable: true, sortValue: (r) => r.comments_count },
+            { key: "engagement", header: "Engagement", render: (r) => fmtNum(r.engagement), align: "right", sortable: true, sortValue: (r) => r.engagement },
+            { key: "narrative", header: "Narrative", render: (r) => r.narrative ?? "—", sortable: true, sortValue: (r) => r.narrative },
+            { key: "sentiment", header: "Sentiment", render: (r) => r.sentiment ?? "—", sortable: true, sortValue: (r) => r.sentiment },
           ]}
         />
         {data && data.total_pages > 1 && (

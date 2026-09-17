@@ -29,9 +29,9 @@ const DEFAULT_FILTERS: GlobalFilters = {
   personB: "",
   platform: "all",
   contentType: "all",
-  dateFrom: daysAgoIso(30),
+  dateFrom: daysAgoIso(1),
   dateTo: null,
-  periodDays: 30,
+  periodDays: 1,
 };
 
 const FilterContext = createContext<FilterContextValue | null>(null);

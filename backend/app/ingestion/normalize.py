@@ -111,10 +111,17 @@ def normalize_post(raw: dict[str, Any], *, person_id: str, person_name: str,
         breakdown = {k: v for k, v in reactions.items() if k != "total"}
 
     if platform == "instagram":
-        # ig_scraper.build_post() hardcodes these -- not real measurements.
+        # ig_scraper.build_post() still hardcodes these two -- not real
+        # measurements.
         shares: int | None = None
-        view_count: int | None = None
         media_urls: list[str] | None = None
+        # view_count IS real now for reels (collect_reel_view_counts, off
+        # the Reels tab) -- but raw records written before that existed
+        # still carry the old hardcoded 0 placeholder. A real reel is never
+        # actually seen by zero people, so treating a literal 0 the same as
+        # "absent" discards that stale placeholder without needing to
+        # touch already-collected raw files.
+        view_count: int | None = raw.get("view_count") or None
     else:
         shares = raw.get("share_count")
         view_count = raw.get("view_count")

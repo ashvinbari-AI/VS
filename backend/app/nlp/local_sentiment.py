@@ -55,8 +55,17 @@ def _get_pipeline(model_name: str):
     if model_name in _pipeline_cache:
         return _pipeline_cache[model_name]
     try:
+        # `transformers` imports torch internally at its own top level, not
+        # lazily -- a torch native-extension failure (e.g. a DLL load error
+        # on Windows) surfaces as a raw OSError here, not an ImportError,
+        # so this must catch broadly, not just ImportError. Anything that
+        # fails here must fall back to the lexicon, never crash the
+        # analysis job (same defensive contract as gemini_client.py).
         from transformers import pipeline
-    except ImportError:
+    except Exception as e:
+        logger = get_logger("analysis", get_settings().logs_dir)
+        logger.warning("Could not load the 'transformers' package/torch (%s: %s) -- "
+                        "falling back to the lexicon for local sentiment", type(e).__name__, e)
         return None
     try:
         pipe = pipeline("sentiment-analysis", model=model_name, top_k=None)

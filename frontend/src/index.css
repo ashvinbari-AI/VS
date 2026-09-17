@@ -11,7 +11,7 @@ html {
 }
 
 body {
-  @apply bg-offwhite text-dark antialiased;
+  @apply bg-offwhite text-dark antialiased dark:bg-navy-950 dark:text-silver;
   font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -58,6 +58,10 @@ button, a, select, input, [role="button"] {
   background: linear-gradient(90deg, #E7EAF2 25%, #F2F4F8 37%, #E7EAF2 63%);
   background-size: 800px 100%;
   animation: shimmer 1.4s ease-in-out infinite;
+}
+.dark .skeleton-shimmer {
+  background: linear-gradient(90deg, #102544 25%, #16305A 37%, #102544 63%);
+  background-size: 800px 100%;
 }
 
 /* Route content fade-in so page switches feel smooth instead of an abrupt

@@ -51,6 +51,22 @@ def test_instagram_hardcoded_placeholders_become_none_not_fake_zero():
     assert item.media_urls is None
 
 
+def test_instagram_real_reel_view_count_passes_through():
+    """ig_scraper.py's Reels-tab view-count collector writes a genuine int
+    for reels it measured -- unlike share_count/media_urls, this one is NOT
+    a placeholder and must pass through as-is, not get force-nulled with
+    the other two Instagram-only fake fields."""
+    post = {**IG_POST, "view_count": 19400}
+    item = normalize_post(post, person_id="p1", person_name="Person One",
+                           platform="instagram", raw_source_file="posts.jsonl",
+                           followers_by_run={})
+    assert item is not None
+    assert item.view_count == 19400
+    # share_count/media_urls are still always-fake for Instagram regardless.
+    assert item.shares is None
+    assert item.media_urls is None
+
+
 def test_facebook_real_values_pass_through():
     item = normalize_post(FB_POST, person_id="p2", person_name="Person Two",
                            platform="facebook", raw_source_file="posts.jsonl",

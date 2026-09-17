@@ -5,9 +5,14 @@ Every field that the source scraper does not actually provide is `None` --
 never a manufactured 0 or "". Two scraper-specific caveats baked in by the
 adapters (see scrapers/*_adapter.py):
 
-  * Instagram's build_post() hardcodes share_count=0, view_count=0,
-    media_urls=[] and comment_timestamp="" -- those are placeholders in the
-    scraper itself, not real zeros, so the IG adapter maps them to None here.
+  * Instagram's build_post() still hardcodes share_count=0, media_urls=[]
+    and comment_timestamp="" -- those are placeholders in the scraper
+    itself, not real zeros, so the IG adapter maps them to None here.
+  * view_count IS a real measurement for Instagram Reels (collect_reel_
+    view_counts, off the profile's Reels tab -- the eye-icon count isn't
+    exposed anywhere else) as of ig_scraper.py's grid-view-count feature.
+    A literal 0 still means the old pre-feature placeholder, though, so the
+    IG adapter maps that (and only that) to None.
   * Facebook's equivalents are real scraped values and pass through as-is.
 
 `raw_source_file` + `raw_record_id` let every downstream number be traced

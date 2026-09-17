@@ -17,7 +17,7 @@ from app.logging_setup import get_logger
 from app.models.common import ApiResponse
 from app.routers import (
     activity, analysis, comments, comparison, content, data_sources,
-    engagement, health, narratives, overview, profiles, scrape,
+    engagement, evaluation, health, narratives, overview, profiles, proof, scrape,
     sentiment, settings as settings_router, timeline,
 )
 
@@ -51,7 +51,7 @@ for router in (
     health.router, profiles.router, scrape.router, analysis.router,
     overview.router, comparison.router, activity.router, engagement.router,
     content.router, narratives.router, sentiment.router, comments.router,
-    timeline.router, data_sources.router, settings_router.router,
+    timeline.router, data_sources.router, settings_router.router, evaluation.router, proof.router,
 ):
     app.include_router(router)
 

@@ -35,13 +35,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2">
         {toasts.map((t) => (
-          <div key={t.id} className="rounded-lg border border-silver/60 bg-white p-3 shadow-lg">
+          <div key={t.id} className="rounded-lg border border-silver/60 bg-white p-3 shadow-lg dark:border-navy-600 dark:bg-navy-800">
             <div className="flex items-start gap-2">
               {t.kind === "success" && <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-emerald-500" />}
               {t.kind === "error" && <XCircle size={18} className="mt-0.5 shrink-0 text-red-500" />}
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-dark">{t.title}</div>
-                {t.message && <div className="mt-0.5 text-xs text-dark/60">{t.message}</div>}
+                <div className="text-sm font-semibold text-dark dark:text-white">{t.title}</div>
+                {t.message && <div className="mt-0.5 text-xs text-dark/60 dark:text-silver/60">{t.message}</div>}
                 {t.action && (
                   <button
                     onClick={() => { t.action!.onClick(); dismiss(t.id); }}
@@ -51,7 +51,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   </button>
                 )}
               </div>
-              <button onClick={() => dismiss(t.id)} className="shrink-0 text-dark/30 hover:text-dark/60">
+              <button onClick={() => dismiss(t.id)} className="shrink-0 text-dark/30 hover:text-dark/60 dark:text-silver/40 dark:hover:text-silver/70">
                 <X size={14} />
               </button>
             </div>

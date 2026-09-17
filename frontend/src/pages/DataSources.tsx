@@ -1,16 +1,18 @@
-import { Pencil, PlayCircle, Plus, RefreshCw, UploadCloud, X } from "lucide-react";
+import { History, Pencil, PlayCircle, Plus, RefreshCw, UploadCloud, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../components/Toast/ToastProvider";
 import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
 import type { PersonConfig } from "../types/api";
-import { fmtDateTime, fmtNum } from "../utils/format";
+import { fmtDate, fmtDateTime, fmtNum } from "../utils/format";
 
 interface DataSourceRow {
   person_id: string; person_name: string; platform: string; profile_url: string | null;
   last_scraped: string | null; content_count: number; comments_count: number;
   status: string; errors: string[];
+  earliest_post: string | null; latest_post: string | null; days_of_content: number | null;
+  scrape_window_since: string | null; scrape_window_until: string | null;
 }
 
 export default function DataSources() {
@@ -21,6 +23,7 @@ export default function DataSources() {
     () => api.get("/data-sources"), []
   );
   const [jobStatus, setJobStatus] = useState<string>("");
+  const [historyFor, setHistoryFor] = useState<{ id: string; name: string } | null>(null);
 
   const reloadAll = () => { reloadPeople(); reloadSources(); };
 
@@ -55,9 +58,11 @@ export default function DataSources() {
 
       <div className="space-y-4">
         {(people ?? []).map((person) => (
-          <PersonCard key={person.id} person={person} onChanged={reloadAll} toast={toast} navigate={navigate} />
+          <PersonCard key={person.id} person={person} onChanged={reloadAll} toast={toast} navigate={navigate} onViewHistory={setHistoryFor} />
         ))}
       </div>
+
+      <ScrapeHistoryDrawer personId={historyFor?.id ?? null} personName={historyFor?.name ?? ""} onClose={() => setHistoryFor(null)} />
 
       <div>
         <h2 className="mb-2 text-sm font-semibold text-dark">Data Source Status</h2>
@@ -66,7 +71,9 @@ export default function DataSources() {
             <thead>
               <tr className="border-b border-silver/60 bg-silver/10 text-left text-xs uppercase text-dark/50">
                 <th className="px-3 py-2">Person</th><th className="px-3 py-2">Platform</th>
-                <th className="px-3 py-2">Last Scraped</th><th className="px-3 py-2 text-right">Content</th>
+                <th className="px-3 py-2">Last Scraped</th>
+                <th className="px-3 py-2">Data Timeline</th>
+                <th className="px-3 py-2 text-right">Content</th>
                 <th className="px-3 py-2 text-right">Comments</th><th className="px-3 py-2">Status</th>
               </tr>
             </thead>
@@ -76,6 +83,7 @@ export default function DataSources() {
                   <td className="px-3 py-2">{row.person_name}</td>
                   <td className="px-3 py-2 capitalize">{row.platform}</td>
                   <td className="px-3 py-2">{fmtDateTime(row.last_scraped)}</td>
+                  <td className="px-3 py-2"><DataTimeline row={row} /></td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.content_count)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.comments_count)}</td>
                   <td className="px-3 py-2">
@@ -87,6 +95,113 @@ export default function DataSources() {
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** How many days of real posts were actually collected -- distinct from
+ * the --since/--until window that was *requested* of the scraper (shown
+ * on hover): a person who posts less often than the window allows will
+ * show a narrower span here, which is a fact about them, not a scraper
+ * failure. */
+function DataTimeline({ row }: { row: DataSourceRow }) {
+  if (!row.earliest_post || !row.latest_post) {
+    return <span className="text-xs text-dark/30">N/A</span>;
+  }
+  const requested = row.scrape_window_since && row.scrape_window_until
+    ? `Requested window: ${fmtDate(row.scrape_window_since)} – ${fmtDate(row.scrape_window_until)}`
+    : undefined;
+  return (
+    <div title={requested}>
+      <div className="text-xs text-dark/80">
+        {fmtDate(row.earliest_post)} – {fmtDate(row.latest_post)}
+      </div>
+      <div className="text-[10px] text-dark/40">
+        {row.days_of_content !== null ? `${fmtNum(row.days_of_content)} day${row.days_of_content === 1 ? "" : "s"} of posts` : ""}
+      </div>
+    </div>
+  );
+}
+
+interface ScrapeRun {
+  run_id: string; platform: string; since: string | null; until: string | null;
+  started_at: string | null; finished_at: string | null;
+  followers: number | null; followers_raw: string | null;
+  posts_scanned: number | null; comments_new: number | null; errors: string[];
+}
+
+/** Every scrape run ever recorded for one person, both platforms -- not
+ * just the single "last scraped" timestamp the summary table shows.
+ * Backed by GET /api/data-sources/{person_id}/history. */
+function ScrapeHistoryDrawer({
+  personId, personName, onClose,
+}: { personId: string | null; personName: string; onClose: () => void }) {
+  const { data, loading, error } = useApi<{ runs: ScrapeRun[] }>(
+    () => api.get(`/data-sources/${personId}/history`),
+    [personId],
+    !!personId
+  );
+
+  if (!personId) return null;
+
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
+      <div className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 flex items-center justify-between border-b border-silver/60 bg-white px-5 py-3">
+          <div>
+            <h2 className="text-sm font-semibold text-dark">Scrape History — {personName}</h2>
+            <div className="text-xs text-dark/50">Every recorded run, newest first</div>
+          </div>
+          <button onClick={onClose} className="rounded p-1 hover:bg-silver/20"><X size={18} /></button>
+        </div>
+
+        {loading && <div className="p-5 text-sm text-dark/50">Loading...</div>}
+        {error && <div className="p-5 text-sm text-red-600">{error}</div>}
+
+        {data && (
+          <div className="space-y-3 p-5">
+            {data.runs.length === 0 ? (
+              <div className="rounded-md border border-dashed border-silver p-6 text-center text-xs text-dark/40">
+                No scrape runs recorded yet for this person.
+              </div>
+            ) : (
+              data.runs.map((run) => (
+                <div key={run.run_id} className="rounded-xl border border-silver/60 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold capitalize text-dark">{run.platform}</span>
+                    <span className="text-[10px] text-dark/40">{run.run_id}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-dark/60">
+                    Requested window: {fmtDate(run.since)} – {fmtDate(run.until)}
+                  </div>
+                  <div className="text-xs text-dark/60">
+                    Ran: {fmtDateTime(run.started_at)} → {fmtDateTime(run.finished_at)}
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <div className="text-[10px] uppercase text-dark/40">Followers</div>
+                      <div className="font-semibold text-dark">{run.followers_raw ?? fmtNum(run.followers)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase text-dark/40">Posts Scanned</div>
+                      <div className="font-semibold text-dark">{fmtNum(run.posts_scanned)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase text-dark/40">New Comments</div>
+                      <div className="font-semibold text-dark">{fmtNum(run.comments_new)}</div>
+                    </div>
+                  </div>
+                  {run.errors?.length > 0 && (
+                    <div className="mt-2 rounded-md bg-red-50 p-2 text-[11px] text-red-700">
+                      {run.errors.slice(0, 3).join("; ")}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -146,8 +261,11 @@ function AddPersonForm({ onAdded }: { onAdded: () => void }) {
 }
 
 function PersonCard({
-  person, onChanged, toast, navigate,
-}: { person: PersonConfig; onChanged: () => void; toast: ReturnType<typeof useToast>; navigate: ReturnType<typeof useNavigate> }) {
+  person, onChanged, toast, navigate, onViewHistory,
+}: {
+  person: PersonConfig; onChanged: () => void; toast: ReturnType<typeof useToast>;
+  navigate: ReturnType<typeof useNavigate>; onViewHistory: (person: { id: string; name: string }) => void;
+}) {
   const [importDir, setImportDir] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("");
   const [editing, setEditing] = useState(false);
@@ -155,6 +273,9 @@ function PersonCard({
   const [ig, setIg] = useState(person.instagram_url ?? "");
   const [fb, setFb] = useState(person.facebook_url ?? "");
   const [saving, setSaving] = useState(false);
+  // The scrape's --days window -- previously hardcoded to 30 with no way
+  // to change it from the UI at all.
+  const [days, setDays] = useState(30);
 
   const saveEdit = async () => {
     setSaving(true);
@@ -176,10 +297,10 @@ function PersonCard({
   ].filter((p): p is string => p !== null);
 
   const startScrape = async (platforms: string[]) => {
-    setStatus("Starting scrape (a browser window may open)...");
+    setStatus(`Starting scrape (last ${days} day${days === 1 ? "" : "s"}; a browser window may open)...`);
     try {
       const { job_id } = await api.post<{ job_id: string }>("/scrape/start", {
-        person_id: person.id, platforms, days: 30, headed: true,
+        person_id: person.id, platforms, days, headed: true,
       });
       pollScrape(job_id, person.name, setStatus, onChanged, toast, () => runAnalysisFromToast(toast, onChanged, navigate));
     } catch (e: any) {
@@ -222,10 +343,21 @@ function PersonCard({
               {person.instagram_url ?? "No Instagram URL"} · {person.facebook_url ?? "No Facebook URL"}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button onClick={() => setEditing(true)} className="flex items-center gap-1 rounded-md border border-silver/80 px-3 py-1.5 text-xs font-medium hover:bg-silver/10">
               <Pencil size={12} /> Edit
             </button>
+            <button onClick={() => onViewHistory({ id: person.id, name: person.name })} className="flex items-center gap-1 rounded-md border border-silver/80 px-3 py-1.5 text-xs font-medium hover:bg-silver/10">
+              <History size={12} /> History
+            </button>
+            <label className="flex items-center gap-1.5 text-xs text-dark/60" title="How many days back to scrape from today">
+              Days
+              <input
+                type="number" min={1} max={365} value={days}
+                onChange={(e) => setDays(Math.max(1, Number(e.target.value) || 1))}
+                className="w-16 rounded-md border border-silver/70 px-2 py-1.5 text-xs"
+              />
+            </label>
             <button
               disabled={configuredPlatforms.length === 0}
               onClick={() => startScrape(configuredPlatforms)}

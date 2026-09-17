@@ -85,6 +85,7 @@ PAGE_PAUSE = (3.0, 5.0)        # random.uniform range, seconds -- after a profil
 POST_PAUSE = (1.5, 2.5)        # before opening a post tab
 SCROLL_PAUSE = 1.0             # inside the comment column
 MAX_COMMENT_SCROLLS = 100
+MAX_REEL_VIEW_SCROLLS = 20     # scrolling the Reels tab to collect view counts
 NO_GROWTH_ROUNDS = 4           # stop scrolling after this many static rounds
 NAV_TIMEOUT_S = 15
 
@@ -104,6 +105,13 @@ SELECTORS = {
                       '//child::span[@role="button"])[2]'
                       ' | //span[contains(text(), "comments")]'),
     "post_links": "//a[contains(@href, '/p/') or contains(@href, '/reel/')]",
+    # Only the profile's dedicated Reels tab (<profile>/reels/) overlays a
+    # view count on each tile -- neither the mixed profile grid nor a
+    # reel's own post page shows it (confirmed against live markup). The
+    # icon svg sits alone in its own wrapper div; the count span is a
+    # sibling of THAT div, not of the svg itself -- hence parent::*/.
+    "grid_view_count": (".//*[local-name()='svg' and @aria-label='View Count Icon']"
+                        "/parent::*/following-sibling::span[1]"),
     "username": ["//header//h2", "//h2", "//h1"],
     "bio": ('//div[@class="_ap3a _aaco _aacw _aacz _aada _aade"]'
             ' | //header//section//div[contains(@class, "ap3a")]'),
@@ -621,13 +629,79 @@ def profile_header(driver, profile_url: str) -> dict:
     return out
 
 
+def collect_reel_view_counts(driver, profile_url: str) -> dict[str, int]:
+    """shortcode -> view count, off the profile's Reels tab.
+
+    The eye-icon view count Instagram shows per Reel only appears on this
+    dedicated tab (<profile>/reels/) -- neither the mixed profile grid nor a
+    reel's own post page exposes it at all, confirmed against live markup.
+    Walked once per scrape run, newest first same as the main grid, so the
+    grid walk can look a count up by shortcode for any reel it processes.
+    Never crashes the run: any failure here just means fewer/no views.
+    """
+    s = _selenium()
+    By = s.By
+    views: dict[str, int] = {}
+    reels_url = re.sub(r"/+$", "", profile_url) + "/reels/"
+    try:
+        driver.get(reels_url)
+        s.Wait(driver, NAV_TIMEOUT_S).until(
+            lambda d: d.execute_script("return document.readyState") == "complete")
+    except Exception:
+        return views
+
+    try:
+        # document.readyState flips to "complete" well before Instagram's
+        # client-rendered grid (images, hover overlays, the view-count
+        # icon) actually mounts -- a fixed jitter isn't reliably enough,
+        # so wait for the real signal: at least one view-count icon
+        # present. An account with no reels at all times out here
+        # harmlessly and returns the empty dict, never crashes the run.
+        s.Wait(driver, NAV_TIMEOUT_S).until(s.EC.presence_of_element_located(
+            (By.XPATH, "//*[local-name()='svg' and @aria-label='View Count Icon']")))
+    except Exception:
+        return views
+    jitter(PAGE_PAUSE)
+
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    static = 0
+    for _ in range(MAX_REEL_VIEW_SCROLLS):
+        try:
+            tiles = driver.find_elements(By.XPATH, SELECTORS["post_links"])
+        except Exception:
+            break
+        for el in tiles:
+            try:
+                code = shortcode(el.get_attribute("href") or "")
+                if not code or code in views:
+                    continue
+                n = parse_count(el.find_element(By.XPATH, SELECTORS["grid_view_count"]).text)
+                if n:
+                    views[code] = n
+            except Exception:
+                continue
+
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        jitter(PAGE_PAUSE)
+        height = driver.execute_script("return document.body.scrollHeight")
+        if height == last_height:
+            static += 1
+            if static >= NO_GROWTH_ROUNDS:
+                break
+        else:
+            static = 0
+        last_height = height
+    return views
+
+
 # --------------------------------------------------------------------------
 # Documents
 # --------------------------------------------------------------------------
 
 
 def build_post(meta: dict, url: str, profile: str, header: dict,
-               n_comments: int, post_type: str = "post") -> dict:
+               n_comments: int, post_type: str = "post",
+               view_count: int | None = None) -> dict:
     """The posts document, field-for-field what fb_scraper writes."""
     return {
         "post_id": post_id_for(url),
@@ -647,7 +721,10 @@ def build_post(meta: dict, url: str, profile: str, header: dict,
         "reactions": {"like": meta.get("likes", 0), "total": meta.get("likes", 0)},
         "comment_count": meta.get("comment_count", 0) or n_comments,
         "share_count": 0,
-        "view_count": 0,
+        # Real for reels (collect_reel_view_counts, off the Reels tab) --
+        # None (never a fabricated 0) for anything that isn't a reel, or a
+        # reel this run couldn't find a count for.
+        "view_count": view_count,
         "media_urls": [],
         "scrape_url": url,
         "comments_captured": n_comments,
@@ -752,7 +829,7 @@ def cmd_scrape(args) -> None:
         driver.refresh()
         jitter(PAGE_PAUSE)
 
-        print("  [1/2] opening the profile...")
+        print("  [1/3] opening the profile...")
         driver.get(args.url)
         try:
             s.Wait(driver, NAV_TIMEOUT_S).until(
@@ -769,7 +846,18 @@ def cmd_scrape(args) -> None:
         print(f"  {header['username']}: {header['followers_raw'] or '?'} followers, "
               f"{header['posts_count'] or '?'} posts")
 
-        print("  [2/2] walking the grid, newest first...")
+        print("  [2/3] collecting reel view counts off the Reels tab...")
+        reel_views = collect_reel_view_counts(driver, args.url)
+        print(f"  {len(reel_views)} reel view counts collected")
+        driver.get(args.url)
+        try:
+            s.Wait(driver, NAV_TIMEOUT_S).until(
+                lambda d: d.execute_script("return document.readyState") == "complete")
+        except Exception:
+            pass
+        jitter((2, 3))
+
+        print("  [3/3] walking the grid, newest first...")
         seen_urls: set[str] = set()
         stop = False
         last_height = driver.execute_script("return document.body.scrollHeight")
@@ -785,16 +873,17 @@ def cmd_scrape(args) -> None:
                 href = normalise_url(raw)
                 if href and "/p/" in href and href not in seen_urls:
                     seen_urls.add(href)
-                    fresh.append((href, is_pinned(el),
-                                  "reel" if "/reel/" in raw else "post"))
+                    post_type = "reel" if "/reel/" in raw else "post"
+                    views = reel_views.get(shortcode(raw)) if post_type == "reel" else None
+                    fresh.append((href, is_pinned(el), post_type, views))
 
-            for url, pinned, post_type in fresh:
+            for url, pinned, post_type, views in fresh:
                 if args.limit and n_posts >= args.limit:
                     print(f"  limit of {args.limit} posts reached.")
                     stop = True
                     break
 
-                got = scrape_one_post(driver, url, pinned, post_type, since, until,
+                got = scrape_one_post(driver, url, pinned, post_type, views, since, until,
                                       store, run_id, profile, header, args, errors)
                 if got is None:                 # older than the window, not pinned
                     stop = True
@@ -861,7 +950,7 @@ def cmd_scrape(args) -> None:
     print()
 
 
-def scrape_one_post(driver, url, pinned, post_type, since, until, store, run_id,
+def scrape_one_post(driver, url, pinned, post_type, view_count, since, until, store, run_id,
                     profile, header, args, errors) -> int | None:
     """Scrape one post in a background tab and commit it.
 
@@ -908,7 +997,7 @@ def scrape_one_post(driver, url, pinned, post_type, since, until, store, run_id,
         post_id = post_id_for(url)
         comments = [build_comment(r, post_id, url) for r in rows]
         store.upsert_post(
-            build_post(meta, url, profile, header, len(comments), post_type),
+            build_post(meta, url, profile, header, len(comments), post_type, view_count),
             run_id)
         seen_ids = set()
         for c in comments:

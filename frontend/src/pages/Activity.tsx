@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CalendarDays, Clock3 } from "lucide-react";
 import { AsyncBoundary } from "../components/Loading/AsyncBoundary";
 import { SelectPeoplePrompt } from "../components/EmptyState/SelectPeoplePrompt";
 import { KpiCompareCard } from "../components/KPI/KpiCompareCard";
 import { ChartCard } from "../components/Charts/ChartCard";
+import { ProofDrawer, type ProofRequest } from "../components/Proof/ProofDrawer";
 import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
 import { useFilters } from "../state/FilterContext";
@@ -24,22 +26,27 @@ export default function ActivityPage() {
     [filters.personA, filters.personB, filters.platform, filters.contentType, filters.dateFrom, filters.periodDays],
     ready
   );
+  const [proof, setProof] = useState<ProofRequest | null>(null);
 
   if (!ready) return <SelectPeoplePrompt />;
+
+  const openProof = (metric: string, label: string) => () =>
+    setProof({
+      personAId: filters.personA, personAName, personBId: filters.personB, personBName,
+      metric, label, platform: filters.platform, contentType: filters.contentType,
+      dateFrom: filters.dateFrom ?? undefined, periodDays: filters.periodDays,
+    });
 
   return (
     <AsyncBoundary loading={loading} error={error} onRetry={reload}>
       {data && (
         <div className="space-y-6">
+          <ProofDrawer request={proof} onClose={() => setProof(null)} />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCompareCard label="Posts / Day" valueA={fmtNum(data.person_a.posts_per_day, 2)} valueB={fmtNum(data.person_b.posts_per_day, 2)} labelA={personAName} labelB={personBName} />
-            <KpiCompareCard label="Posts / Week" valueA={fmtNum(data.person_a.posts_per_week, 1)} valueB={fmtNum(data.person_b.posts_per_week, 1)} labelA={personAName} labelB={personBName} />
-            <KpiCompareCard label="Active Days" valueA={fmtNum(data.person_a.active_days)} valueB={fmtNum(data.person_b.active_days)} labelA={personAName} labelB={personBName} />
-            <KpiCompareCard label="Longest Inactive (days)" valueA={fmtNum(data.person_a.longest_inactive_period_days, 1)} valueB={fmtNum(data.person_b.longest_inactive_period_days, 1)} labelA={personAName} labelB={personBName} />
-            <KpiCompareCard label="Most Active Day" valueA={data.person_a.most_active_day ?? "N/A"} valueB={data.person_b.most_active_day ?? "N/A"} labelA={personAName} labelB={personBName} />
-            <KpiCompareCard label="Most Active Hour" valueA={data.person_a.most_active_hour ?? "N/A"} valueB={data.person_b.most_active_hour ?? "N/A"} labelA={personAName} labelB={personBName} />
-            <KpiCompareCard label="Median Post Interval (hrs)" valueA={fmtNum(data.person_a.consistency?.median_interval_hours, 1)} valueB={fmtNum(data.person_b.consistency?.median_interval_hours, 1)} labelA={personAName} labelB={personBName} />
-            <KpiCompareCard label="Reels / Week" valueA={fmtNum(data.person_a.reels_per_week, 1)} valueB={fmtNum(data.person_b.reels_per_week, 1)} labelA={personAName} labelB={personBName} />
+            <KpiCompareCard label="Posts / Day" valueA={fmtNum(data.person_a.posts_per_day, 2)} valueB={fmtNum(data.person_b.posts_per_day, 2)} labelA={personAName} labelB={personBName} onProof={openProof("posts_per_day", "Posts / Day")} />
+            <KpiCompareCard label="Posts / Week" valueA={fmtNum(data.person_a.posts_per_week, 1)} valueB={fmtNum(data.person_b.posts_per_week, 1)} labelA={personAName} labelB={personBName} onProof={openProof("posts_per_week", "Posts / Week")} />
+            <KpiCompareCard label="Active Days" valueA={fmtNum(data.person_a.active_days)} valueB={fmtNum(data.person_b.active_days)} labelA={personAName} labelB={personBName} onProof={openProof("active_days", "Active Days")} />
+            <KpiCompareCard label="Longest Inactive (days)" valueA={fmtNum(data.person_a.longest_inactive_period_days, 1)} valueB={fmtNum(data.person_b.longest_inactive_period_days, 1)} labelA={personAName} labelB={personBName} onProof={openProof("longest_inactive_period_days", "Longest Inactive (days)")} />
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

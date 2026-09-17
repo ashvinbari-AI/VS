@@ -80,6 +80,13 @@ def _safe_percentile(series: pd.Series, q: float) -> float | None:
     return round(float(s.quantile(q)), 2)
 
 
+def _safe_sum(series: pd.Series) -> float | None:
+    s = series.dropna()
+    if s.empty:
+        return None
+    return round(float(s.sum()), 2)
+
+
 def calculate_total_content(df: pd.DataFrame) -> int:
     return int(len(df))
 
@@ -108,9 +115,35 @@ def calculate_median_shares(df: pd.DataFrame) -> float | None:
     return _safe_median(df["shares"]) if "shares" in df else None
 
 
+def calculate_sum_likes(df: pd.DataFrame) -> float | None:
+    return _safe_sum(df["likes"]) if "likes" in df else None
+
+
+def calculate_sum_comments(df: pd.DataFrame) -> float | None:
+    return _safe_sum(df["comments_count"]) if "comments_count" in df else None
+
+
+def calculate_sum_shares(df: pd.DataFrame) -> float | None:
+    return _safe_sum(df["shares"]) if "shares" in df else None
+
+
+def calculate_sum_views(df: pd.DataFrame) -> float | None:
+    """sum(view_count) over whatever rows the caller already filtered to
+    (e.g. content_type == 'post'). Real for Instagram Reels (the scraper's
+    Reels-tab view-count collector -- see ingestion/normalize.py) and for
+    Facebook; still None/N/A for Instagram photos/carousels, which Instagram
+    never exposes a view count for at all -- never a fabricated 0."""
+    return _safe_sum(df["view_count"]) if "view_count" in df else None
+
+
 def calculate_average_engagement(df: pd.DataFrame) -> float | None:
     eng = compute_engagement_series(df)
     return _safe_mean(eng)
+
+
+def calculate_sum_engagement(df: pd.DataFrame) -> float | None:
+    eng = compute_engagement_series(df)
+    return _safe_sum(eng)
 
 
 def calculate_median_engagement(df: pd.DataFrame) -> float | None:

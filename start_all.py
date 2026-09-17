@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import platform
 import socket
 import subprocess
 import sys
@@ -60,6 +61,24 @@ def ensure_frontend_deps() -> None:
     if not (FRONTEND_DIR / "node_modules").exists():
         print("  Installing frontend dependencies (npm install)...")
         subprocess.run(["npm", "install"], cwd=str(FRONTEND_DIR), check=True, shell=(sys.platform == "win32"))
+
+
+def stop(proc: subprocess.Popen) -> None:
+    """proc.terminate() alone is not enough for the frontend: it's spawned
+    with shell=True on Windows (`npm run dev` needs a shell there), so
+    terminate() only kills the cmd.exe wrapper -- the actual node/vite
+    process underneath survives as an orphan, still bound to its port.
+    Repeated Ctrl+C-and-restart cycles then pile up zombie dev servers
+    (this is exactly what happened in practice: three orphaned frontend
+    processes accumulated from three restarts before this fix). `taskkill
+    /T` kills the whole process tree, not just the immediate child."""
+    if proc.poll() is not None:
+        return
+    if platform.system() == "Windows":
+        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                        capture_output=True)
+    else:
+        proc.terminate()
 
 
 def wait_for(url: str, timeout: float = 30) -> bool:
@@ -127,8 +146,7 @@ def main() -> None:
         pass
     finally:
         for proc in (backend_proc, frontend_proc):
-            if proc.poll() is None:
-                proc.terminate()
+            stop(proc)
 
 
 if __name__ == "__main__":

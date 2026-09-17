@@ -24,3 +24,8 @@ torch==2.5.1
 
 pytest==8.3.4
 httpx==0.28.1
+
+# Used by the independent evaluation/ package (evaluation/config/thresholds.py)
+# for its PASS/WARNING/FAIL thresholds file -- was already present
+# transitively (huggingface_hub pulls it in) but is now a direct import.
+pyyaml==6.0.3

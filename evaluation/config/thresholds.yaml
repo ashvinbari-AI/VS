@@ -1,0 +1,33 @@
+# Project acceptance thresholds -- NOT industry standards, just the bar
+# this project has decided a metric must clear to count as PASS. Edit these
+# as the team's own standards change; every evaluator/report reads from
+# here, nothing is hardcoded in evaluator code (spec section 27).
+#
+# Each metric gets three bands:
+#   value >= pass       -> PASS
+#   warn <= value < pass -> WARNING
+#   value < warn         -> FAIL
+# A metric with only "pass" defined has no WARNING band (binary pass/fail).
+
+data:
+  completeness_pct:      { pass: 95, warn: 85 }
+  field_accuracy_pct:    { pass: 98, warn: 90 }
+  data_quality_pct:      { pass: 95, warn: 85 }
+  duplicate_f1:          { pass: 0.95, warn: 0.85 }
+
+analytics:
+  metric_accuracy_pct:   { pass: 100, warn: 99 }   # engagement/avg/median arithmetic must match exactly
+  activity_accuracy_pct: { pass: 100, warn: 99 }
+  comparison_accuracy_pct: { pass: 100, warn: 100 } # winner/direction logic: no partial credit
+
+nlp:
+  sentiment_f1:          { pass: 0.85, warn: 0.70 }
+  narrative_f1:          { pass: 0.80, warn: 0.65 }
+  comment_theme_f1:      { pass: 0.75, warn: 0.60 }
+  issue_f1:              { pass: 0.80, warn: 0.65 }
+
+regression:
+  # Anything dropping more than this many percentage points vs. the stored
+  # baseline is flagged REGRESSION even if it's still above its own PASS
+  # threshold above.
+  max_allowed_drop_pct_points: 3.0

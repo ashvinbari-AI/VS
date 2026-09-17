@@ -4,7 +4,7 @@ export function Skeleton({ className = "h-4 w-full" }: { className?: string }) {
 
 export function CardSkeleton() {
   return (
-    <div className="rounded-xl border border-silver/60 bg-white p-4 shadow-card space-y-3">
+    <div className="rounded-xl border border-silver/60 bg-white p-4 shadow-card space-y-3 dark:border-navy-700 dark:bg-navy-900">
       <div className="flex items-start justify-between gap-2">
         <Skeleton className="h-3 w-1/2" />
         <Skeleton className="h-8 w-8 rounded-lg" />

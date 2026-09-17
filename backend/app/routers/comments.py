@@ -4,6 +4,9 @@ breakdown, and an issue drilldown. Never infers commenter location (section
 
 from __future__ import annotations
 
+import math
+
+import pandas as pd
 from fastapi import APIRouter, Query
 
 from app.analytics import engine as eng
@@ -11,6 +14,12 @@ from app.models.common import ApiResponse
 from app.storage.data_source import get_comments_df, get_content_df
 
 router = APIRouter(prefix="/api/comments", tags=["comments"])
+
+_LIST_COLUMNS = [
+    "comment_id", "content_id", "person_id", "person_name", "platform",
+    "author_username", "comment_text", "commented_at", "like_count",
+    "sentiment", "theme",
+]
 
 
 def _issue_breakdown(comments_df, content_df) -> list[dict]:
@@ -68,6 +77,58 @@ def get_comments(
         "label": "Model-classified theme/sentiment" if analysis_available else None,
         "person_a": block(comments_a, content_a),
         "person_b": block(comments_b, content_b),
+    })
+
+
+@router.get("/list")
+def list_comments(
+    person_id: str = Query(...),
+    platform: str | None = None,
+    sentiment: str | None = None,
+    date_from: str | None = None, date_to: str | None = None,
+    search: str | None = None,
+    page: int = 1, page_size: int = 25,
+) -> ApiResponse:
+    """Paginated raw comments for one person -- the drilldown behind a
+    sentiment donut slice (spec section 23/45: clicking a slice must let a
+    reviewer see the actual text behind a model-assigned label, not just
+    trust the count)."""
+    df = get_comments_df()
+    if not df.empty:
+        df = df[df["person_id"] == person_id]
+    if not df.empty and platform and platform.lower() != "all":
+        df = df[df["platform"] == platform.lower()]
+    if not df.empty and sentiment:
+        df = df[df["sentiment"] == sentiment]
+    if not df.empty and (date_from or date_to):
+        dt = pd.to_datetime(df["commented_at"], errors="coerce", utc=True)
+        if date_from:
+            df = df[dt >= pd.Timestamp(date_from, tz="UTC")]
+            dt = dt[df.index]
+        if date_to:
+            df = df[dt <= pd.Timestamp(date_to, tz="UTC")]
+    if not df.empty and search:
+        needle = search.lower()
+        df = df[df["comment_text"].fillna("").str.lower().str.contains(needle, regex=False)]
+
+    if df.empty:
+        return ApiResponse.ok({"items": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 1})
+
+    df = df.sort_values("commented_at", ascending=False, na_position="last")
+    total = len(df)
+    start = max(0, (page - 1) * page_size)
+    page_df = df.iloc[start:start + page_size]
+
+    cols = [c for c in _LIST_COLUMNS if c in page_df.columns]
+    records = page_df[cols].to_dict(orient="records")
+    for r in records:
+        for k, v in list(r.items()):
+            if isinstance(v, float) and math.isnan(v):
+                r[k] = None
+
+    return ApiResponse.ok({
+        "items": records, "total": total, "page": page, "page_size": page_size,
+        "total_pages": math.ceil(total / page_size) if page_size else 1,
     })
 
 

@@ -2,6 +2,8 @@
  * blank -- so missing scraper data is always visible, per spec sections
  * 15/41/54 ("never hide missing data"). */
 
+import { applyDatePattern, getDateFormat } from "./dateFormat";
+
 export function fmtNum(value: number | null | undefined, digits = 0): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "N/A";
   return value.toLocaleString(undefined, { maximumFractionDigits: digits });
@@ -17,11 +19,13 @@ export function fmtPct(value: number | null | undefined, digits = 2): string {
   return `${value.toFixed(digits)}%`;
 }
 
+/** Follows the Settings page's "Date format" field (default "DD MMM
+ * YYYY") -- see utils/dateFormat.ts for how that value gets here. */
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "N/A";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "N/A";
-  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  return applyDatePattern(d, getDateFormat());
 }
 
 export function fmtDateTime(iso: string | null | undefined): string {
@@ -29,7 +33,7 @@ export function fmtDateTime(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "N/A";
   return (
-    d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }) +
+    applyDatePattern(d, getDateFormat()) +
     " " +
     d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
   );
