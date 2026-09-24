@@ -201,9 +201,29 @@ def _driver(headed: bool, chrome_path: str | None = None):
     if chrome_path:
         opts.binary_location = chrome_path
 
+    # ChromeDriverManager().install() has to reach a Google host to resolve
+    # "latest driver version" even when a matching driver is already cached
+    # locally -- a momentary DNS/network blip there raises before webdriver_
+    # manager ever consults its own cache, which otherwise sinks an entire
+    # scrape run for a hiccup that clears itself a few seconds later.
+    driver_path = None
+    last_err: Exception | None = None
+    for attempt in range(3):
+        try:
+            driver_path = s.driver_manager().install()
+            break
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                time.sleep(2)
+    if driver_path is None:
+        sys.exit(f"\n  Could not start Chrome: {str(last_err).splitlines()[0]}\n"
+                 f"  Point at a browser explicitly, e.g.:\n"
+                 f"    --chrome-path /usr/bin/google-chrome\n")
+
     try:
         drv = s.webdriver.Chrome(
-            service=s.Service(s.driver_manager().install()), options=opts)
+            service=s.Service(driver_path), options=opts)
     except Exception as e:
         sys.exit(f"\n  Could not start Chrome: {str(e).splitlines()[0]}\n"
                  f"  Point at a browser explicitly, e.g.:\n"

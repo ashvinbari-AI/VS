@@ -23,7 +23,10 @@ def nlp_status() -> dict[str, Any]:
     return {
         "nlp_enabled_setting": bool(settings.get("nlp_enabled")),
         "gemini_configured": gemini_ready,
-        "effective_mode": "GEMINI NLP ENABLED" if enabled else "LOCAL ANALYSIS MODE",
+        # Gemini only ever powers Comment Sentiment (see analyze_content_df /
+        # analyze_comments_df) -- the label says so rather than implying
+        # narrative/post-sentiment/theme/issues are Gemini-backed too.
+        "effective_mode": "GEMINI NLP ENABLED (Comment Sentiment)" if enabled else "LOCAL ANALYSIS MODE",
         "use_gemini": enabled,
     }
 
@@ -41,8 +44,12 @@ def analyze_content_df(df: pd.DataFrame, force: bool = False) -> pd.DataFrame:
         df["nlp_model"] = pd.Series(dtype="object")
         return df
 
-    status = nlp_status()
-    use_gemini = status["use_gemini"]
+    # Gemini is scoped to Comment Sentiment only (see analyze_comments_df) --
+    # post narrative and post ("Comment Sentiment" vs "Post Sentiment" in the
+    # UI/report, spec section 45) sentiment always stay on the local
+    # transformer/rule-based tiers, regardless of the Gemini toggle, so a
+    # user enabling Gemini for comments doesn't unexpectedly burn quota on
+    # every post too.
     cache = nlp_cache.load_cache()
     new_entries: dict[str, dict] = {}
 
@@ -59,8 +66,8 @@ def analyze_content_df(df: pd.DataFrame, force: bool = False) -> pd.DataFrame:
             continue
 
         caption = row.get("caption")
-        n_result = narrative.classify_narrative(caption, use_gemini)
-        s_result = sentiment.classify_sentiment(caption, use_gemini)
+        n_result = narrative.classify_narrative(caption, use_gemini=False)
+        s_result = sentiment.classify_sentiment(caption, use_gemini=False)
 
         entry = {
             "content_id": cid,
@@ -114,9 +121,12 @@ def analyze_comments_df(df: pd.DataFrame, force: bool = False) -> pd.DataFrame:
             continue
 
         text = row.get("comment_text")
+        # Comment Sentiment is the one and only analysis Gemini is allowed
+        # to run (see note in analyze_content_df) -- theme/issue extraction
+        # for comments stay rule-based even with Gemini enabled.
         s_result = sentiment.classify_sentiment(text, use_gemini)
-        t_result = comment_theme.classify_theme(text, use_gemini)
-        i_result = issue_extraction.classify_issues(text, use_gemini)
+        t_result = comment_theme.classify_theme(text, use_gemini=False)
+        i_result = issue_extraction.classify_issues(text, use_gemini=False)
 
         entry = {
             "content_id": cid,

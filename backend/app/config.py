@@ -47,8 +47,9 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.0-flash"
 
     # -- Local, fully-offline sentiment models (optional; SENTIMENT ONLY --
-    # narrative/comment-theme/issue-extraction stay on the keyword lexicon
-    # unless Gemini is enabled). Needs `transformers` + `torch` installed.
+    # narrative/comment-theme/issue-extraction always stay on the keyword
+    # lexicon: Gemini is scoped to Comment Sentiment only, see
+    # app/nlp/engine.py). Needs `transformers` + `torch` installed.
     # Devanagari-script text is routed to marathi_sentiment_model, everything
     # else to sentiment_model -- see app/nlp/local_sentiment.py. Both unset
     # (the default) keeps the zero-dependency lexicon, unchanged.

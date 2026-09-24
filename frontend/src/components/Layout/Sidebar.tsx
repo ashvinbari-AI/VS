@@ -67,8 +67,8 @@ export function Sidebar() {
         <StatusLine label="Local" ok />
         <StatusLine label="Data Loaded" ok={!!health?.demo_mode || health !== undefined} />
         <StatusLine
-          label={health?.nlp_mode === "GEMINI NLP ENABLED" ? "Gemini: Enabled" : "Gemini: Disabled"}
-          ok={health?.nlp_mode === "GEMINI NLP ENABLED"}
+          label={health?.nlp_mode?.startsWith("GEMINI NLP ENABLED") ? "Gemini: Comment Sentiment" : "Gemini: Disabled"}
+          ok={!!health?.nlp_mode?.startsWith("GEMINI NLP ENABLED")}
         />
         {health?.demo_mode && (
           <div className="mt-2 inline-flex items-center rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold-300">

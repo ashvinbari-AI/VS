@@ -33,6 +33,27 @@ export default function DataSources() {
     pollAnalysis(job_id, setJobStatus, reloadAll, toast, navigate);
   };
 
+  const forceReanalyze = async () => {
+    // Bypasses the NLP cache (data/analysis/nlp_cache.json) so every
+    // content/comment row is re-classified from scratch instead of reusing
+    // whatever was cached before -- the only way to pick up a model change
+    // (e.g. Gemini just enabled, or SENTIMENT_MODEL just set) for rows that
+    // were already analyzed. Confirm first: on a large dataset this re-runs
+    // NLP on everything, which is slower and, if Gemini is enabled, spends
+    // Gemini quota re-classifying Comment Sentiment for rows that already
+    // had a result.
+    if (!window.confirm(
+      "Force re-analyze ALL content and comments, ignoring cached results?\n\n" +
+      "This re-runs narrative/sentiment/theme/issue classification for every row " +
+      "(local models/lexicon), and if Gemini NLP is enabled, re-classifies Comment " +
+      "Sentiment via Gemini too -- which uses API quota. This can take a while on a " +
+      "large dataset."
+    )) return;
+    setJobStatus("Starting forced re-analysis...");
+    const { job_id } = await api.post<{ job_id: string }>("/analysis/run", { skip_nlp: false, force_reanalyze: true });
+    pollAnalysis(job_id, setJobStatus, reloadAll, toast, navigate);
+  };
+
   return (
     <div className="space-y-6">
       {sources?.demo_mode && (
@@ -49,6 +70,10 @@ export default function DataSources() {
           </button>
           <button onClick={runAnalysis} className="flex items-center gap-1 rounded-md bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy/90">
             <PlayCircle size={13} /> Run Analysis
+          </button>
+          <button onClick={forceReanalyze} title="Ignore cached NLP results and re-classify everything -- use after enabling Gemini or a local sentiment model so already-analyzed rows pick it up"
+            className="flex items-center gap-1 rounded-md border border-navy/60 px-3 py-1.5 text-xs font-semibold text-navy hover:bg-navy/10">
+            <RefreshCw size={13} /> Force Reanalyze
           </button>
         </div>
       </div>

@@ -1,11 +1,11 @@
 {
   "gemini_model": "gemini-2.0-flash",
   "nlp_enabled": false,
-  "analysis_batch_size": 20,
+  "analysis_batch_size": 24,
   "data_directory": "A:\\VS\\data",
   "date_format": "DD MMM YYYY",
   "theme": "light",
-  "auto_refresh": false,
+  "auto_refresh": true,
   "default_comparison_period_days": 30,
   "demo_mode": false
 }

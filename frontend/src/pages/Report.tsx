@@ -1,5 +1,9 @@
-import { useMemo } from "react";
-import { Download } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Download, Loader2, Trophy } from "lucide-react";
+import {
+  Bar, BarChart, CartesianGrid, Legend, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { AsyncBoundary } from "../components/Loading/AsyncBoundary";
@@ -8,6 +12,8 @@ import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
 import { useFilters } from "../state/FilterContext";
 import { fmtDate, fmtNum, fmtPct } from "../utils/format";
+import { svgToPng } from "../utils/chartExport";
+import { COLOR_GRID, COLOR_PRIMARY, COLOR_SECONDARY } from "../utils/theme";
 
 type Row = (string | number)[];
 
@@ -17,6 +23,92 @@ type Row = (string | number)[];
 function mergeDist(a: Record<string, number> | undefined, b: Record<string, number> | undefined): Row[] {
   const labels = Array.from(new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])).sort();
   return labels.map((label) => [label, fmtNum(a?.[label] ?? 0), fmtNum(b?.[label] ?? 0)]);
+}
+
+type Pair = { name: string; a: number; b: number };
+
+/** Same union-of-labels merge as mergeDist, but numeric so it can be charted. */
+function distPairs(a: Record<string, number> | undefined, b: Record<string, number> | undefined): Pair[] {
+  const labels = Array.from(new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])).sort();
+  return labels.map((name) => ({ name, a: a?.[name] ?? 0, b: b?.[name] ?? 0 }));
+}
+
+const AXIS_TICK = { fontSize: 11, fill: "#5B6478" };
+
+/** Card shell for one chart. The data-pdf-* attributes let handleDownload
+ * find every rendered chart in on-screen order and place it in the PDF. */
+function ChartPanel({ title, note, wide, children }: { title: string; note?: string; wide?: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      data-pdf-chart
+      data-pdf-title={title}
+      data-pdf-wide={wide ? "1" : "0"}
+      className={`rounded-xl border border-silver/60 bg-white p-4 shadow-card ${wide ? "lg:col-span-2" : ""}`}
+    >
+      <h3 className="text-sm font-semibold text-dark">{title}</h3>
+      {note && <p className="text-xs text-dark/50">{note}</p>}
+      <div className="mt-2">{children}</div>
+    </div>
+  );
+}
+
+function GroupedBars({
+  data, nameA, nameB, height = 260, suffix = "", angle = 0,
+}: { data: Pair[]; nameA: string; nameB: string; height?: number; suffix?: string; angle?: number }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke={COLOR_GRID} vertical={false} />
+        <XAxis dataKey="name" tick={AXIS_TICK} interval={0} angle={angle} textAnchor={angle ? "end" : "middle"} height={angle ? 70 : 30} />
+        <YAxis tick={AXIS_TICK} width={52} tickFormatter={(v) => `${fmtNum(v, 0)}${suffix}`} />
+        <Tooltip formatter={(v: number) => `${fmtNum(v, 2)}${suffix}`} />
+        <Legend />
+        <Bar name={nameA} dataKey="a" fill={COLOR_PRIMARY} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+        <Bar name={nameB} dataKey="b" fill={COLOR_SECONDARY} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function IssueBars({ rows, color }: { rows: { name: string; value: number }[]; color: string }) {
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(160, rows.length * 30 + 30)}>
+      <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 24, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke={COLOR_GRID} horizontal={false} />
+        <XAxis type="number" tick={AXIS_TICK} />
+        <YAxis type="category" dataKey="name" tick={AXIS_TICK} width={130} interval={0} />
+        <Tooltip formatter={(v: number) => `${fmtNum(v)} mentions`} />
+        <Bar name="Mentions" dataKey="value" fill={color} radius={[0, 3, 3, 0]} isAnimationActive={false} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+/** Headline stat: both people's value side by side, leader marked with a trophy. */
+function StatCard({ label, a, b, nameA, nameB, lead }: { label: string; a: string; b: string; nameA: string; nameB: string; lead: "a" | "b" | null }) {
+  const cell = (color: string, name: string, value: string, isLead: boolean) => (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-1 text-[11px] text-dark/50">
+        <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
+        <span className="truncate">{name}</span>
+        {isLead && <Trophy size={11} className="shrink-0 text-gold-600" />}
+      </div>
+      <div className={`text-lg font-semibold ${isLead ? "text-dark" : "text-dark/70"}`}>{value}</div>
+    </div>
+  );
+  return (
+    <div className="rounded-xl border border-silver/60 bg-white p-4 shadow-card">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-navy-700/70">{label}</div>
+      <div className="flex gap-3">
+        {cell(COLOR_PRIMARY, nameA, a, lead === "a")}
+        {cell(COLOR_SECONDARY, nameB, b, lead === "b")}
+      </div>
+    </div>
+  );
+}
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return <h2 className="border-l-4 border-gold pl-2 text-sm font-semibold uppercase tracking-wide text-navy-700">{children}</h2>;
 }
 
 function Section({ title, head, rows }: { title: string; head: string[]; rows: Row[] }) {
@@ -68,9 +160,16 @@ export default function Report() {
     ready
   );
 
-  const loading = overview.loading || engagement.loading || sentiment.loading || narratives.loading || comments.loading;
+  // Feeds the radar only -- a failure here shouldn't block the rest of the report.
+  const comparison = useApi<any>(
+    () => api.get("/comparison", { ...commonParams, period_days: filters.periodDays }),
+    [...deps, filters.periodDays],
+    ready
+  );
+
+  const loading = comparison.loading || overview.loading || engagement.loading || sentiment.loading || narratives.loading || comments.loading;
   const error = overview.error || engagement.error || sentiment.error || narratives.error || comments.error;
-  const reloadAll = () => { overview.reload(); engagement.reload(); sentiment.reload(); narratives.reload(); comments.reload(); };
+  const reloadAll = () => { overview.reload(); engagement.reload(); sentiment.reload(); narratives.reload(); comments.reload(); comparison.reload(); };
 
   const kpiRows: Row[] = useMemo(() => {
     if (!overview.data) return [];
@@ -134,7 +233,65 @@ export default function Report() {
   const issuesARows = useMemo(() => issuesRows(comments.data?.person_a), [comments.data]);
   const issuesBRows = useMemo(() => issuesRows(comments.data?.person_b), [comments.data]);
 
-  const handleDownload = () => {
+  const [downloading, setDownloading] = useState(false);
+  const chartsRef = useRef<HTMLDivElement>(null);
+
+  const kpi = overview.data?.kpis;
+  const lead = (a?: number | null, b?: number | null): "a" | "b" | null =>
+    typeof a === "number" && typeof b === "number" && a !== b ? (a > b ? "a" : "b") : null;
+
+  const radarData = useMemo(
+    () => Object.entries(comparison.data?.normalized_analytics_index?.dimensions ?? {}).map(([dimension, v]: [string, any]) => ({
+      dimension, a: v.person_a ?? 0, b: v.person_b ?? 0,
+    })),
+    [comparison.data]
+  );
+  const mixPairs: Pair[] = useMemo(() => kpi ? [
+    { name: "Posts", a: kpi.person_a.posts ?? 0, b: kpi.person_b.posts ?? 0 },
+    { name: "Reels", a: kpi.person_a.reels ?? 0, b: kpi.person_b.reels ?? 0 },
+  ] : [], [kpi]);
+  const totalsPairs: Pair[] = useMemo(() => kpi ? [
+    { name: "Likes", a: kpi.person_a.total_likes ?? 0, b: kpi.person_b.total_likes ?? 0 },
+    { name: "Comments", a: kpi.person_a.total_comments_count ?? 0, b: kpi.person_b.total_comments_count ?? 0 },
+    { name: "Engagement", a: kpi.person_a.total_engagement ?? 0, b: kpi.person_b.total_engagement ?? 0 },
+  ] : [], [kpi]);
+  const avgPairs: Pair[] = useMemo(() => kpi ? [
+    { name: "Avg Likes", a: kpi.person_a.average_likes ?? 0, b: kpi.person_b.average_likes ?? 0 },
+    { name: "Avg Comments", a: kpi.person_a.average_comments ?? 0, b: kpi.person_b.average_comments ?? 0 },
+  ] : [], [kpi]);
+  const engPairs: Pair[] = useMemo(() => {
+    const a = engagement.data?.person_a, b = engagement.data?.person_b;
+    if (!a || !b) return [];
+    return [
+      { name: "Average", a: a.average_engagement ?? 0, b: b.average_engagement ?? 0 },
+      { name: "P90", a: a.p90_engagement ?? 0, b: b.p90_engagement ?? 0 },
+      { name: "P95", a: a.p95_engagement ?? 0, b: b.p95_engagement ?? 0 },
+      { name: "Top 10% avg", a: a.top10_percent_avg_engagement ?? 0, b: b.top10_percent_avg_engagement ?? 0 },
+    ];
+  }, [engagement.data]);
+  const postSentPairs = useMemo(() => distPairs(sentiment.data?.post_sentiment?.person_a, sentiment.data?.post_sentiment?.person_b), [sentiment.data]);
+  const commentSentPairs = useMemo(() => distPairs(sentiment.data?.comment_sentiment?.person_a, sentiment.data?.comment_sentiment?.person_b), [sentiment.data]);
+  const narrativePairs: Pair[] = useMemo(
+    () => narratives.data?.analysis_available
+      ? (narratives.data.table ?? []).map((r: any) => ({ name: r.narrative, a: r.person_a_pct ?? 0, b: r.person_b_pct ?? 0 }))
+      : [],
+    [narratives.data]
+  );
+  const themePairs = useMemo(() => distPairs(comments.data?.person_a?.theme_breakdown, comments.data?.person_b?.theme_breakdown), [comments.data]);
+  const issueBars = (block: any) => (block?.issues ?? []).slice(0, 10).map((r: any) => ({ name: r.issue, value: r.mentions ?? 0 }));
+  const issuesABars = useMemo(() => issueBars(comments.data?.person_a), [comments.data]);
+  const issuesBBars = useMemo(() => issueBars(comments.data?.person_b), [comments.data]);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await buildPdf();
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const buildPdf = async () => {
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const marginX = 40;
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -155,6 +312,59 @@ export default function Report() {
     doc.text(`Generated ${new Date().toLocaleString()}`, marginX, y);
     doc.setTextColor(20);
     y += 10;
+
+    // Visual comparison: every chart currently on screen, two per row
+    // (full-width ones get their own row), ahead of the data tables.
+    const usableW = doc.internal.pageSize.getWidth() - marginX * 2;
+    const gap = 14;
+    const halfW = (usableW - gap) / 2;
+    const nodes = Array.from(chartsRef.current?.querySelectorAll<HTMLElement>("[data-pdf-chart]") ?? []);
+    const captured = await Promise.all(nodes.map(async (n) => {
+      const svg = n.querySelector<SVGSVGElement>("svg.recharts-surface");
+      if (!svg) return null;
+      try {
+        return { title: n.dataset.pdfTitle ?? "", wide: n.dataset.pdfWide === "1", img: await svgToPng(svg) };
+      } catch {
+        return null;
+      }
+    }));
+    const charts = captured.filter((c): c is NonNullable<typeof c> => !!c);
+    if (charts.length) {
+      y += 26;
+      doc.setFontSize(13);
+      doc.text("Visual Comparison", marginX, y);
+      y += 16;
+      // The on-screen legends are HTML (not in the SVG), so draw one shared key.
+      doc.setFontSize(9);
+      doc.setFillColor(22, 48, 90);
+      doc.rect(marginX, y - 7, 8, 8, "F");
+      doc.text(personAName, marginX + 12, y);
+      const bx = marginX + 12 + doc.getTextWidth(personAName) + 18;
+      doc.setFillColor(245, 166, 35);
+      doc.rect(bx, y - 7, 8, 8, "F");
+      doc.text(personBName, bx + 12, y);
+      y += 14;
+
+      const heightAt = (c: (typeof charts)[number], w: number) => (c.img.height / c.img.width) * w + 30;
+      let i = 0;
+      while (i < charts.length) {
+        const solo = charts[i].wide || i === charts.length - 1 || charts[i + 1].wide;
+        const row = solo ? [charts[i]] : [charts[i], charts[i + 1]];
+        const w = solo && charts[i].wide ? usableW : halfW;
+        const h = Math.max(...row.map((c) => heightAt(c, w)));
+        if (y + h > pageHeight - 40) { doc.addPage(); y = 50; }
+        row.forEach((c, k) => {
+          const x = marginX + k * (halfW + gap);
+          doc.setFontSize(10);
+          doc.text(c.title, x, y + 10);
+          doc.addImage(c.img.url, "PNG", x, y + 16, w, heightAt(c, w) - 30);
+        });
+        y += h + 8;
+        i += row.length;
+      }
+      doc.addPage();
+      y = 50;
+    }
 
     const section = (title: string, head: string[], body: Row[]) => {
       if (!body.length) return;
@@ -203,11 +413,97 @@ export default function Report() {
           </div>
           <button
             onClick={handleDownload}
-            className="flex items-center gap-1.5 rounded-md bg-gold px-3 py-2 text-xs font-semibold text-navy-900 hover:brightness-95"
+            disabled={downloading}
+            className="flex items-center gap-1.5 rounded-md bg-gold px-3 py-2 text-xs font-semibold text-navy-900 hover:brightness-95 disabled:opacity-60"
           >
-            <Download size={14} /> Download PDF
+            {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            {downloading ? "Building PDF..." : "Download PDF"}
           </button>
         </div>
+
+        {kpi && (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard label="Followers" nameA={personAName} nameB={personBName}
+              a={fmtNum(kpi.person_a.followers)} b={fmtNum(kpi.person_b.followers)} lead={lead(kpi.person_a.followers, kpi.person_b.followers)} />
+            <StatCard label="Total Content" nameA={personAName} nameB={personBName}
+              a={fmtNum(kpi.person_a.total_content)} b={fmtNum(kpi.person_b.total_content)} lead={lead(kpi.person_a.total_content, kpi.person_b.total_content)} />
+            <StatCard label="Engagement Rate" nameA={personAName} nameB={personBName}
+              a={fmtPct(kpi.person_a.engagement_rate)} b={fmtPct(kpi.person_b.engagement_rate)} lead={lead(kpi.person_a.engagement_rate, kpi.person_b.engagement_rate)} />
+            <StatCard label="Total Engagement" nameA={personAName} nameB={personBName}
+              a={fmtNum(kpi.person_a.total_engagement)} b={fmtNum(kpi.person_b.total_engagement)} lead={lead(kpi.person_a.total_engagement, kpi.person_b.total_engagement)} />
+          </div>
+        )}
+
+        <SectionHeading>Visual comparison</SectionHeading>
+        <div ref={chartsRef} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {radarData.length > 0 && (
+            <ChartPanel title="Overall Comparison (Normalized Index)" note={comparison.data?.normalized_analytics_index?.note} wide>
+              <ResponsiveContainer width="100%" height={340}>
+                <RadarChart data={radarData} outerRadius={120}>
+                  <PolarGrid stroke={COLOR_GRID} />
+                  <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 11, fill: "#5B6478" }} />
+                  <PolarRadiusAxis tick={{ fontSize: 9, fill: "#8B93A7" }} axisLine={false} />
+                  <Tooltip formatter={(v: number) => fmtNum(v, 1)} />
+                  <Legend />
+                  <Radar name={personAName} dataKey="a" stroke={COLOR_PRIMARY} fill={COLOR_PRIMARY} fillOpacity={0.25} isAnimationActive={false} />
+                  <Radar name={personBName} dataKey="b" stroke={COLOR_SECONDARY} fill={COLOR_SECONDARY} fillOpacity={0.35} isAnimationActive={false} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </ChartPanel>
+          )}
+          {mixPairs.length > 0 && (
+            <ChartPanel title="Content Mix (Posts vs Reels)">
+              <GroupedBars data={mixPairs} nameA={personAName} nameB={personBName} />
+            </ChartPanel>
+          )}
+          {totalsPairs.length > 0 && (
+            <ChartPanel title="Total Likes, Comments & Engagement">
+              <GroupedBars data={totalsPairs} nameA={personAName} nameB={personBName} />
+            </ChartPanel>
+          )}
+          {avgPairs.length > 0 && (
+            <ChartPanel title="Average Likes & Comments per Post">
+              <GroupedBars data={avgPairs} nameA={personAName} nameB={personBName} />
+            </ChartPanel>
+          )}
+          {engPairs.length > 0 && (
+            <ChartPanel title="Engagement Distribution">
+              <GroupedBars data={engPairs} nameA={personAName} nameB={personBName} />
+            </ChartPanel>
+          )}
+          {postSentPairs.length > 0 && (
+            <ChartPanel title="Post Sentiment">
+              <GroupedBars data={postSentPairs} nameA={personAName} nameB={personBName} />
+            </ChartPanel>
+          )}
+          {commentSentPairs.length > 0 && (
+            <ChartPanel title="Comment Sentiment">
+              <GroupedBars data={commentSentPairs} nameA={personAName} nameB={personBName} />
+            </ChartPanel>
+          )}
+          {narrativePairs.length > 0 && (
+            <ChartPanel title="Narrative Share (% of content)" wide>
+              <GroupedBars data={narrativePairs} nameA={personAName} nameB={personBName} suffix="%" angle={-25} height={300} />
+            </ChartPanel>
+          )}
+          {themePairs.length > 0 && (
+            <ChartPanel title="Comment Themes" wide>
+              <GroupedBars data={themePairs} nameA={personAName} nameB={personBName} angle={-25} height={300} />
+            </ChartPanel>
+          )}
+          {issuesABars.length > 0 && (
+            <ChartPanel title={`Top Public Issues -- ${personAName}`}>
+              <IssueBars rows={issuesABars} color={COLOR_PRIMARY} />
+            </ChartPanel>
+          )}
+          {issuesBBars.length > 0 && (
+            <ChartPanel title={`Top Public Issues -- ${personBName}`}>
+              <IssueBars rows={issuesBBars} color={COLOR_SECONDARY} />
+            </ChartPanel>
+          )}
+        </div>
+
+        <SectionHeading>Detailed data</SectionHeading>
 
         <Section title="Overview KPIs" head={["Metric", personAName, personBName]} rows={kpiRows} />
         <Section title="Engagement Summary" head={["Metric", personAName, personBName]} rows={engagementRows} />
