@@ -53,8 +53,6 @@ export interface ContentItem {
   engagement: number | null;
   narrative: string | null;
   narrative_confidence: number | null;
-  sentiment: string | null;
-  sentiment_confidence: number | null;
   nlp_model: string | null;
 }
 
@@ -77,8 +75,9 @@ export interface CommentItem {
 }
 
 export interface GlobalFilters {
-  personA: string;
-  personB: string;
+  /** Selected people, in comparison order (2..MAX_PEOPLE). Each person's
+   * chart color is decided by their slot in this list (see PERSON_COLORS). */
+  personIds: string[];
   platform: "all" | "instagram" | "facebook";
   contentType: "all" | "post" | "reel" | "video" | "photo";
   dateFrom: string | null;

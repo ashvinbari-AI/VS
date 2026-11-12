@@ -14,34 +14,33 @@ from fastapi import APIRouter, Query
 from app.analytics import engine as eng
 from app.analytics.filters import filter_content
 from app.models.common import ApiResponse
+from app.routers.people_params import parse_person_ids
 from app.storage.data_source import get_content_df
 
 router = APIRouter(prefix="/api/narratives", tags=["narratives"])
 
 
-def _narrative_table(df_a, df_b) -> list[dict]:
-    all_narratives = set()
-    if "narrative" in df_a.columns:
-        all_narratives |= set(df_a["narrative"].dropna().unique())
-    if "narrative" in df_b.columns:
-        all_narratives |= set(df_b["narrative"].dropna().unique())
+def _narrative_table(dfs: dict) -> list[dict]:
+    """One row per narrative; `people` holds each selected person's count,
+    share of their own content, and avg/median engagement on it."""
+    all_narratives: set = set()
+    for df in dfs.values():
+        if "narrative" in df.columns:
+            all_narratives |= set(df["narrative"].dropna().unique())
 
-    total_a, total_b = len(df_a), len(df_b)
     rows = []
     for n in sorted(all_narratives):
-        sub_a = df_a[df_a["narrative"] == n] if "narrative" in df_a.columns else df_a.iloc[0:0]
-        sub_b = df_b[df_b["narrative"] == n] if "narrative" in df_b.columns else df_b.iloc[0:0]
-        rows.append({
-            "narrative": n,
-            "person_a_count": len(sub_a),
-            "person_a_pct": round(len(sub_a) / total_a * 100, 1) if total_a else None,
-            "person_a_avg_engagement": eng.calculate_average_engagement(sub_a),
-            "person_a_median_engagement": eng.calculate_median_engagement(sub_a),
-            "person_b_count": len(sub_b),
-            "person_b_pct": round(len(sub_b) / total_b * 100, 1) if total_b else None,
-            "person_b_avg_engagement": eng.calculate_average_engagement(sub_b),
-            "person_b_median_engagement": eng.calculate_median_engagement(sub_b),
-        })
+        people = {}
+        for pid, df in dfs.items():
+            sub = df[df["narrative"] == n] if "narrative" in df.columns else df.iloc[0:0]
+            total = len(df)
+            people[pid] = {
+                "count": len(sub),
+                "pct": round(len(sub) / total * 100, 1) if total else None,
+                "avg_engagement": eng.calculate_average_engagement(sub),
+                "median_engagement": eng.calculate_median_engagement(sub),
+            }
+        rows.append({"narrative": n, "people": people})
     return rows
 
 
@@ -69,22 +68,25 @@ def _trend(df) -> list[dict]:
 
 @router.get("")
 def get_narratives(
-    person_a: str = Query(...), person_b: str = Query(...),
+    person_ids: list[str] = Query(...),
     platform: str | None = None, content_type: str | None = None,
     date_from: str | None = None, date_to: str | None = None,
 ) -> ApiResponse:
+    ids = parse_person_ids(person_ids)
     content = get_content_df()
     analysis_available = "narrative" in content.columns and content["narrative"].notna().any()
 
-    df_a = filter_content(content, person_ids=[person_a], platform=platform,
-                           content_type=content_type, date_from=date_from, date_to=date_to)
-    df_b = filter_content(content, person_ids=[person_b], platform=platform,
-                           content_type=content_type, date_from=date_from, date_to=date_to)
+    dfs = {
+        pid: filter_content(content, person_ids=[pid], platform=platform,
+                            content_type=content_type, date_from=date_from, date_to=date_to)
+        for pid in ids
+    }
 
     return ApiResponse.ok({
+        "person_ids": ids,
         "analysis_available": bool(analysis_available),
-        "table": _narrative_table(df_a, df_b),
-        "scatter": {"person_a": _scatter(df_a), "person_b": _scatter(df_b)},
-        "trend": {"person_a": _trend(df_a), "person_b": _trend(df_b)},
+        "table": _narrative_table(dfs),
+        "scatter": {pid: _scatter(dfs[pid]) for pid in ids},
+        "trend": {pid: _trend(dfs[pid]) for pid in ids},
         "label": "Model-classified narrative" if analysis_available else None,
     })

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query
 from app.analytics import engine as eng
 from app.analytics.filters import filter_content
 from app.models.common import ApiResponse
+from app.routers.people_params import parse_person_ids
 from app.storage.data_source import get_content_df, get_profiles_df, latest_followers
 
 router = APIRouter(prefix="/api/engagement", tags=["engagement"])
@@ -17,7 +18,7 @@ _TOP_CONTENT_COLUMNS = ["content_id", "person_id", "person_name", "platform", "c
 
 
 def _top_by_type(df: pd.DataFrame, content_type: str, n: int = 3) -> list[dict]:
-    """Top-N by engagement within one content_type, both people pooled
+    """Top-N by engagement within one content_type, all selected people pooled
     together (spec section 67: labeled by rank/engagement, never 'viral')."""
     if df.empty:
         return []
@@ -58,26 +59,27 @@ def _engagement_block(df, followers) -> dict:
 
 @router.get("")
 def get_engagement(
-    person_a: str = Query(...), person_b: str = Query(...),
+    person_ids: list[str] = Query(...),
     platform: str | None = None, content_type: str | None = None,
     date_from: str | None = None, date_to: str | None = None,
 ) -> ApiResponse:
+    ids = parse_person_ids(person_ids)
     content = get_content_df()
     profiles = get_profiles_df()
-    df_a = filter_content(content, person_ids=[person_a], platform=platform,
-                           content_type=content_type, date_from=date_from, date_to=date_to)
-    df_b = filter_content(content, person_ids=[person_b], platform=platform,
-                           content_type=content_type, date_from=date_from, date_to=date_to)
-    followers_a = latest_followers(profiles, person_a)
-    followers_b = latest_followers(profiles, person_b)
+    dfs = {
+        pid: filter_content(content, person_ids=[pid], platform=platform,
+                            content_type=content_type, date_from=date_from, date_to=date_to)
+        for pid in ids
+    }
 
-    combined = pd.concat([df_a, df_b], ignore_index=True) if not (df_a.empty and df_b.empty) else df_a
+    non_empty = [df for df in dfs.values() if not df.empty]
+    combined = pd.concat(non_empty, ignore_index=True) if non_empty else next(iter(dfs.values()))
     top_posts = _top_by_type(combined, "post")
     top_reels = _top_by_type(combined, "reel")
 
     return ApiResponse.ok({
-        "person_a": _engagement_block(df_a, followers_a),
-        "person_b": _engagement_block(df_b, followers_b),
+        "person_ids": ids,
+        "people": {pid: _engagement_block(dfs[pid], latest_followers(profiles, pid)) for pid in ids},
         "top_posts": top_posts,
         "top_reels": top_reels,
     })

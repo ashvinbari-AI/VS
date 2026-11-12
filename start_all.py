@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import socket
 import subprocess
@@ -94,11 +95,21 @@ def wait_for(url: str, timeout: float = 30) -> bool:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--backend-port", type=int, default=8000)
+    # Fixed backend port (not 8000): other local apps commonly use 8000, and
+    # a browser tab left open on one of them kept polling this backend.
+    ap.add_argument("--backend-port", type=int, default=3001)
     ap.add_argument("--frontend-port", type=int, default=5173)
     args = ap.parse_args()
 
-    backend_port = find_free_port(args.backend_port)
+    # The backend port is FIXED -- never silently moved to the next free
+    # port, so the API is always at the same, predictable address.
+    backend_port = args.backend_port
+    if not is_port_free(backend_port):
+        print(f"\n  ERROR: port {backend_port} is already in use, so the backend can't start.")
+        print(f"  Find what is using it:   netstat -ano | findstr :{backend_port}")
+        print("  Then close that program (or end its PID in Task Manager) and run this again,")
+        print("  or pick another port:    python start_all.py --backend-port <port>")
+        sys.exit(1)
     frontend_port = find_free_port(args.frontend_port)
 
     print("Verifying Python environment...")
@@ -117,11 +128,13 @@ def main() -> None:
         print("  ! backend did not come up in time -- check backend/logs/backend.log")
 
     print(f"Starting React/Vite frontend on port {frontend_port}...")
-    # Vite's dev proxy (frontend/vite.config.ts) targets 127.0.0.1:8000 --
-    # if you changed --backend-port, edit that file's proxy target too.
+    # Vite's dev proxy (frontend/vite.config.ts) reads BACKEND_PORT, so the
+    # frontend always talks to the backend started above, including when a
+    # different --backend-port was passed.
+    frontend_env = {**os.environ, "BACKEND_PORT": str(backend_port)}
     frontend_proc = subprocess.Popen(
         ["npm", "run", "dev", "--", "--port", str(frontend_port)],
-        cwd=str(FRONTEND_DIR), shell=(sys.platform == "win32"),
+        cwd=str(FRONTEND_DIR), shell=(sys.platform == "win32"), env=frontend_env,
     )
 
     print(f"""

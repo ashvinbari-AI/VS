@@ -105,15 +105,16 @@ frontend — `GET /api/settings` only reports whether one is configured.
 ```powershell
 python start_all.py
 ```
-Prints the backend (`http://127.0.0.1:8000`, docs at `/docs`) and frontend
-(`http://127.0.0.1:5173`) URLs. Handles port conflicts by trying the next
-free port.
+Prints the backend (`http://127.0.0.1:3001`, docs at `/docs`) and frontend
+(`http://127.0.0.1:5173`) URLs. The backend always uses fixed port 3001; if
+something else is using it, the launcher stops and says so. The frontend
+moves to the next free port if 5173 is taken.
 
 ### Manually (two terminals)
 ```powershell
 # Terminal 1 -- backend
 cd backend
-.venv\Scripts\uvicorn app.main:app --reload --port 8000
+.venv\Scripts\uvicorn app.main:app --reload --port 3001
 
 # Terminal 2 -- frontend
 cd frontend
@@ -123,9 +124,11 @@ npm run dev
 ## 5. First-time workflow
 
 1. Open the app, go to **Data Sources**.
-2. **Add Person** — name + Instagram/Facebook profile URLs. Repeat for a
-   second person. You can save any number of people, not just two — pick
-   which two to compare from the header dropdowns.
+2. **Add Person** — name + Instagram/Facebook profile URLs. Repeat for
+   everyone you want to compare. You can save any number of people and
+   compare up to 6 at once (A vs B vs C vs D ...) — pick them in the header
+   and use **+ Add person** for each extra one. Each person keeps their own
+   color across every chart.
 3. Get data into a person, either:
    - **Start Scraping** — runs your `ig_scraper.py` / `fb_scraper.py`
      `scrape` command as a background job (progress shown live). Requires
@@ -146,7 +149,7 @@ npm run dev
      default, a local transformer for sentiment if configured (section 7a),
      or Gemini if enabled in Settings — and caches results in
      `data/analysis/nlp_cache.json` so nothing is re-analyzed twice.
-5. Select both people in the header and explore Overview, Comparison,
+5. Select two or more people in the header and explore Overview, Comparison,
    Activity, Engagement, Narratives, Sentiment, Comments, Timeline, and
    Content Explorer.
 
@@ -287,9 +290,11 @@ dashboard and FastAPI endpoints for it are not built yet) is in
 - **Devanagari/emoji text garbled in a Windows terminal** — that's the
   terminal's code page, not the app; the browser UI and the stored
   JSON/Parquet files are correct UTF-8 throughout.
-- **Port already in use** — `start_all.py` automatically tries the next
-  free port for both backend and frontend; if you start them manually,
-  pass `--port` explicitly.
+- **Port already in use** — the backend's port is fixed at 3001.
+  `start_all.py` stops with a message if it's taken: run
+  `netstat -ano | findstr :3001`, close that program, and retry, or use
+  `python start_all.py --backend-port <port>` (the frontend follows it
+  automatically).
 - **Gemini errors** — check `logs/analysis.log`; the app always falls
   back to local rule-based NLP and keeps working.
 

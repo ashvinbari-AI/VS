@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import math
 
-import pandas as pd
 from fastapi import APIRouter, Query
 
 from app.analytics import engine as eng
+from app.analytics.filters import filter_comments_by_post
 from app.models.common import ApiResponse
+from app.routers.people_params import parse_person_ids
 from app.storage.data_source import get_comments_df, get_content_df
 
 router = APIRouter(prefix="/api/comments", tags=["comments"])
@@ -46,18 +47,14 @@ def _issue_breakdown(comments_df, content_df) -> list[dict]:
 
 @router.get("")
 def get_comments(
-    person_a: str = Query(...), person_b: str = Query(...),
+    person_ids: list[str] = Query(...),
     platform: str | None = None,
 ) -> ApiResponse:
+    ids = parse_person_ids(person_ids)
     comments = get_comments_df()
     content = get_content_df()
     if platform and platform.lower() != "all" and not comments.empty:
         comments = comments[comments["platform"] == platform.lower()]
-
-    comments_a = comments[comments["person_id"] == person_a] if not comments.empty else comments
-    comments_b = comments[comments["person_id"] == person_b] if not comments.empty else comments
-    content_a = content[content["person_id"] == person_a] if not content.empty else content
-    content_b = content[content["person_id"] == person_b] if not content.empty else content
 
     analysis_available = "theme" in comments.columns and comments["theme"].notna().any()
 
@@ -72,11 +69,17 @@ def get_comments(
             "issues": _issue_breakdown(c_df, content_df),
         }
 
+    people = {}
+    for pid in ids:
+        c_df = comments[comments["person_id"] == pid] if not comments.empty else comments
+        content_df = content[content["person_id"] == pid] if not content.empty else content
+        people[pid] = block(c_df, content_df)
+
     return ApiResponse.ok({
+        "person_ids": ids,
         "analysis_available": bool(analysis_available),
         "label": "Model-classified theme/sentiment" if analysis_available else None,
-        "person_a": block(comments_a, content_a),
-        "person_b": block(comments_b, content_b),
+        "people": people,
     })
 
 
@@ -84,6 +87,7 @@ def get_comments(
 def list_comments(
     person_id: str = Query(...),
     platform: str | None = None,
+    content_type: str | None = None,
     sentiment: str | None = None,
     date_from: str | None = None, date_to: str | None = None,
     search: str | None = None,
@@ -92,21 +96,18 @@ def list_comments(
     """Paginated raw comments for one person -- the drilldown behind a
     sentiment donut slice (spec section 23/45: clicking a slice must let a
     reviewer see the actual text behind a model-assigned label, not just
-    trust the count)."""
+    trust the count). content_type/date_from/date_to go through
+    filter_comments_by_post -- see app/analytics/filters.py: a comment has
+    no reliable timestamp of its own, so these apply to its parent post."""
     df = get_comments_df()
     if not df.empty:
         df = df[df["person_id"] == person_id]
-    if not df.empty and platform and platform.lower() != "all":
-        df = df[df["platform"] == platform.lower()]
+    df = filter_comments_by_post(
+        df, get_content_df(), platform=platform, content_type=content_type,
+        date_from=date_from, date_to=date_to,
+    )
     if not df.empty and sentiment:
         df = df[df["sentiment"] == sentiment]
-    if not df.empty and (date_from or date_to):
-        dt = pd.to_datetime(df["commented_at"], errors="coerce", utc=True)
-        if date_from:
-            df = df[dt >= pd.Timestamp(date_from, tz="UTC")]
-            dt = dt[df.index]
-        if date_to:
-            df = df[dt <= pd.Timestamp(date_to, tz="UTC")]
     if not df.empty and search:
         needle = search.lower()
         df = df[df["comment_text"].fillna("").str.lower().str.contains(needle, regex=False)]
@@ -133,12 +134,13 @@ def list_comments(
 
 
 @router.get("/issues/{issue}")
-def get_issue_drilldown(issue: str, person_a: str = Query(...), person_b: str = Query(...)) -> ApiResponse:
+def get_issue_drilldown(issue: str, person_ids: list[str] = Query(...)) -> ApiResponse:
+    ids = parse_person_ids(person_ids)
     comments = get_comments_df()
     if comments.empty or "issues" not in comments.columns:
         return ApiResponse.ok({"issue": issue, "items": []})
     matching = comments[comments["issues"].apply(lambda v: isinstance(v, list) and issue in v)]
-    matching = matching[matching["person_id"].isin([person_a, person_b])]
+    matching = matching[matching["person_id"].isin(ids)]
     items = matching[["content_id", "commented_at", "person_id", "person_name", "platform",
                        "comment_text", "sentiment"]].to_dict(orient="records") if not matching.empty else []
     return ApiResponse.ok({"issue": issue, "items": items, "total": len(items)})

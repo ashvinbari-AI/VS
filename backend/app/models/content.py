@@ -60,15 +60,15 @@ class NormalizedContent(BaseModel):
     # the adapter. None until calculate_engagement() has run over the row.
     engagement: int | None = None
 
-    # -- AI/model-generated classifications (spec section 8/20/23/42) --
+    # -- AI/model-generated classification (spec section 8/20/23/42) --
     # Populated only after POST /api/analysis/run has done an NLP pass; None
-    # means "not analyzed yet", not "neutral"/"other". Always render these in
-    # the UI as "Model-classified", distinct from the deterministic fields
-    # above -- never as ground truth.
+    # means "not analyzed yet", not "Other". Always render this in the UI as
+    # "Model-classified", distinct from the deterministic fields above --
+    # never as ground truth. Post-level sentiment was removed (Comment
+    # Sentiment, on NormalizedComment below, is the only sentiment this app
+    # classifies) -- narrative classification is the only thing left here.
     narrative: str | None = None
     narrative_confidence: float | None = None
-    sentiment: str | None = None
-    sentiment_confidence: float | None = None
     nlp_model: str | None = None
 
 

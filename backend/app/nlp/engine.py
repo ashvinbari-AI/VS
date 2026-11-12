@@ -32,57 +32,44 @@ def nlp_status() -> dict[str, Any]:
 
 
 def analyze_content_df(df: pd.DataFrame, force: bool = False) -> pd.DataFrame:
-    """Adds narrative/sentiment columns to a content DataFrame, using the
-    cache keyed by content_id and only calling the classifiers for rows not
-    already cached (unless force=True)."""
+    """Adds narrative columns to a content DataFrame, using the cache keyed
+    by content_id and only calling the classifier for rows not already
+    cached (unless force=True). Post-level sentiment was removed entirely --
+    Comment Sentiment (analyze_comments_df) is the only sentiment this app
+    classifies -- so this never touches Gemini or any sentiment tier."""
     if df.empty:
         df = df.copy()
         df["narrative"] = pd.Series(dtype="object")
         df["narrative_confidence"] = pd.Series(dtype="float64")
-        df["sentiment"] = pd.Series(dtype="object")
-        df["sentiment_confidence"] = pd.Series(dtype="float64")
         df["nlp_model"] = pd.Series(dtype="object")
         return df
 
-    # Gemini is scoped to Comment Sentiment only (see analyze_comments_df) --
-    # post narrative and post ("Comment Sentiment" vs "Post Sentiment" in the
-    # UI/report, spec section 45) sentiment always stay on the local
-    # transformer/rule-based tiers, regardless of the Gemini toggle, so a
-    # user enabling Gemini for comments doesn't unexpectedly burn quota on
-    # every post too.
     cache = nlp_cache.load_cache()
     new_entries: dict[str, dict] = {}
 
-    narratives, narrative_conf, sentiments, sentiment_conf, models = [], [], [], [], []
-    for _, row in df.iterrows():
-        cid = row["content_id"]
+    narratives, narrative_conf, models = [], [], []
+    # zip over columns, not iterrows(): iterrows builds a pandas Series per
+    # row, which was most of the analysis time on ~75K mostly-cached rows.
+    for cid, caption in zip(df["content_id"], df["caption"] if "caption" in df else [None] * len(df)):
         cached = cache.get(cid) if not force else None
         if cached:
             narratives.append(cached.get("narrative"))
             narrative_conf.append(cached.get("narrative_confidence"))
-            sentiments.append(cached.get("sentiment"))
-            sentiment_conf.append(cached.get("sentiment_confidence"))
             models.append(cached.get("model"))
             continue
 
-        caption = row.get("caption")
         n_result = narrative.classify_narrative(caption, use_gemini=False)
-        s_result = sentiment.classify_sentiment(caption, use_gemini=False)
 
         entry = {
             "content_id": cid,
             "narrative": n_result["narrative"] if n_result else None,
             "narrative_confidence": n_result["confidence"] if n_result else None,
-            "sentiment": s_result["sentiment"] if s_result else None,
-            "sentiment_confidence": s_result["confidence"] if s_result else None,
-            "model": (n_result or s_result or {}).get("model"),
+            "model": (n_result or {}).get("model"),
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
         new_entries[cid] = entry
         narratives.append(entry["narrative"])
         narrative_conf.append(entry["narrative_confidence"])
-        sentiments.append(entry["sentiment"])
-        sentiment_conf.append(entry["sentiment_confidence"])
         models.append(entry["model"])
 
     if new_entries:
@@ -91,8 +78,6 @@ def analyze_content_df(df: pd.DataFrame, force: bool = False) -> pd.DataFrame:
     out = df.copy()
     out["narrative"] = narratives
     out["narrative_confidence"] = narrative_conf
-    out["sentiment"] = sentiments
-    out["sentiment_confidence"] = sentiment_conf
     out["nlp_model"] = models
     return out
 
@@ -111,8 +96,9 @@ def analyze_comments_df(df: pd.DataFrame, force: bool = False) -> pd.DataFrame:
     new_entries: dict[str, dict] = {}
 
     sentiments, themes, issues_list = [], [], []
-    for _, row in df.iterrows():
-        cid = "comment:" + row["comment_id"]
+    texts = df["comment_text"] if "comment_text" in df else [None] * len(df)
+    for comment_id, text in zip(df["comment_id"], texts):
+        cid = "comment:" + comment_id
         cached = cache.get(cid) if not force else None
         if cached:
             sentiments.append(cached.get("sentiment"))
@@ -120,7 +106,6 @@ def analyze_comments_df(df: pd.DataFrame, force: bool = False) -> pd.DataFrame:
             issues_list.append(cached.get("issues") or [])
             continue
 
-        text = row.get("comment_text")
         # Comment Sentiment is the one and only analysis Gemini is allowed
         # to run (see note in analyze_content_df) -- theme/issue extraction
         # for comments stay rule-based even with Gemini enabled.

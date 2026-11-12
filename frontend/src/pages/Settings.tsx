@@ -66,9 +66,10 @@ export default function SettingsPage() {
           <Toggle checked={!!settings.nlp_enabled} onChange={(v) => update({ nlp_enabled: v })} />
         </Row>
         <p className="text-[11px] text-dark/40">
-          Gemini is only ever used for Comment Sentiment. Post sentiment, narrative, comment theme, and
-          issue extraction always run locally (transformer model if configured, else the rule-based lexicon),
-          regardless of this toggle -- disabling it also shifts Comment Sentiment straight to the local model.
+          Gemini is only ever used for Comment Sentiment (post-level sentiment isn't classified at all --
+          only narrative is). Comment theme and issue extraction always run locally (transformer model if
+          configured, else the rule-based lexicon), regardless of this toggle -- disabling it also shifts
+          Comment Sentiment straight to the local model.
         </p>
         <Row label="Analysis batch size">
           <input type="number" className="w-24 rounded-md border border-silver/70 px-2 py-1 text-sm" value={settings.analysis_batch_size}

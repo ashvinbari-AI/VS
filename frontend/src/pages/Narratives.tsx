@@ -4,19 +4,14 @@ import { SelectPeoplePrompt } from "../components/EmptyState/SelectPeoplePrompt"
 import { EmptyState } from "../components/EmptyState/EmptyState";
 import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
-import { useFilters } from "../state/FilterContext";
+import { comparisonDeps, comparisonParams, useFilters } from "../state/FilterContext";
 import { fmtNum } from "../utils/format";
-import { COLOR_PRIMARY } from "../utils/theme";
 
 export default function Narratives() {
-  const { filters, personAName, personBName } = useFilters();
-  const ready = !!filters.personA && !!filters.personB;
+  const { filters, selected, ready } = useFilters();
   const { data, loading, error, reload } = useApi<any>(
-    () => api.get("/narratives", {
-      person_a: filters.personA, person_b: filters.personB, platform: filters.platform,
-      content_type: filters.contentType, date_from: filters.dateFrom, date_to: filters.dateTo,
-    }),
-    [filters.personA, filters.personB, filters.platform, filters.contentType, filters.dateFrom],
+    () => api.get("/narratives", comparisonParams(filters)),
+    comparisonDeps(filters),
     ready
   );
 
@@ -37,21 +32,34 @@ export default function Narratives() {
             <table className="w-full min-w-[700px] text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase text-dark/50">
-                  <th className="px-3 py-2">Narrative</th>
-                  <th className="px-3 py-2 text-right">{personAName} %</th>
-                  <th className="px-3 py-2 text-right">{personBName} %</th>
-                  <th className="px-3 py-2 text-right">{personAName} Avg Engagement</th>
-                  <th className="px-3 py-2 text-right">{personBName} Avg Engagement</th>
+                  <th className="px-3 py-2" rowSpan={2}>Narrative</th>
+                  {selected.map((p) => (
+                    <th key={p.id} colSpan={2} className="border-l border-silver/30 px-3 pt-2 text-center normal-case">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color }} />
+                        {p.name}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+                <tr className="text-left text-[10px] uppercase text-dark/40">
+                  {selected.map((p) => [
+                    <th key={`${p.id}-pct`} className="border-l border-silver/30 px-3 pb-2 text-right">% of content</th>,
+                    <th key={`${p.id}-eng`} className="px-3 pb-2 text-right">Avg Engagement</th>,
+                  ])}
                 </tr>
               </thead>
               <tbody>
                 {data.table.map((row: any) => (
                   <tr key={row.narrative} className="border-t border-silver/30">
                     <td className="px-3 py-2 font-medium">{row.narrative}</td>
-                    <td className="px-3 py-2 text-right">{row.person_a_pct != null ? `${row.person_a_pct}%` : "N/A"}</td>
-                    <td className="px-3 py-2 text-right">{row.person_b_pct != null ? `${row.person_b_pct}%` : "N/A"}</td>
-                    <td className="px-3 py-2 text-right">{fmtNum(row.person_a_avg_engagement)}</td>
-                    <td className="px-3 py-2 text-right">{fmtNum(row.person_b_avg_engagement)}</td>
+                    {selected.map((p) => {
+                      const cell = row.people?.[p.id];
+                      return [
+                        <td key={`${p.id}-pct`} className="border-l border-silver/30 px-3 py-2 text-right">{cell?.pct != null ? `${cell.pct}%` : "N/A"}</td>,
+                        <td key={`${p.id}-eng`} className="px-3 py-2 text-right">{fmtNum(cell?.avg_engagement)}</td>,
+                      ];
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -59,8 +67,9 @@ export default function Narratives() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <ScatterCard title={`${personAName}: Volume × Engagement`} points={data.scatter.person_a} />
-            <ScatterCard title={`${personBName}: Volume × Engagement`} points={data.scatter.person_b} />
+            {selected.map((p) => (
+              <ScatterCard key={p.id} title={`${p.name}: Volume × Engagement`} points={data.scatter[p.id] ?? []} color={p.color} />
+            ))}
           </div>
         </div>
       )}
@@ -68,7 +77,7 @@ export default function Narratives() {
   );
 }
 
-function ScatterCard({ title, points }: { title: string; points: any[] }) {
+function ScatterCard({ title, points, color }: { title: string; points: any[]; color: string }) {
   return (
     <div className="rounded-xl border border-silver/60 bg-white p-4 shadow-card transition-shadow duration-150 ease-smooth hover:shadow-card-hover">
       <h3 className="mb-2 text-sm font-semibold text-dark">{title}</h3>
@@ -89,7 +98,7 @@ function ScatterCard({ title, points }: { title: string; points: any[] }) {
               </div>
             );
           }} />
-          <Scatter data={points} fill={COLOR_PRIMARY} />
+          <Scatter data={points} fill={color} />
         </ScatterChart>
       </ResponsiveContainer>
     </div>

@@ -9,18 +9,17 @@ import { fmtDate, fmtDateTime, fmtNum } from "../utils/format";
 import type { ContentItem } from "../types/api";
 
 export default function Timeline() {
-  const { filters } = useFilters();
-  const ready = !!filters.personA && !!filters.personB;
+  const { filters, ready } = useFilters();
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
 
   const { data, loading, error, reload } = useApi<{ items: ContentItem[]; total: number; total_pages: number }>(
     () => api.get("/timeline", {
-      person_ids: [filters.personA, filters.personB], platform: filters.platform,
+      person_ids: filters.personIds, platform: filters.platform,
       content_type: filters.contentType, date_from: filters.dateFrom, date_to: filters.dateTo,
       page, page_size: 30,
     }),
-    [filters.personA, filters.personB, filters.platform, filters.contentType, filters.dateFrom, page],
+    [filters.personIds.join(","), filters.platform, filters.contentType, filters.dateFrom, page],
     ready
   );
 

@@ -227,7 +227,10 @@ def print_console_report(report: dict, scorecard: list[dict], sample_sizes: dict
         for name, r in regression_result["metrics"].items():
             if r["status"] == "REGRESSION":
                 any_regression = True
-                print(f"{name}: {r['baseline']} -> {r['current']}  ({r['diff']:+})  REGRESSION")
+                # diff is None when either side has no value (e.g. a metric
+                # that was measured in the baseline is N/A this run).
+                diff = f"{r['diff']:+}" if r.get("diff") is not None else "n/a"
+                print(f"{name}: {r['baseline']} -> {r['current']}  ({diff})  REGRESSION")
         if not any_regression:
             print("No regression detected.")
     print("=" * W)

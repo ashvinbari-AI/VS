@@ -3,7 +3,7 @@ Political Person Social Media Intelligence -- FastAPI backend.
 
 LOCAL-ONLY: the only outbound network call this process ever makes is to
 Gemini, and only when GEMINI_API_KEY is set and NLP is enabled in settings.
-Run with: uvicorn app.main:app --reload --port 8000  (from backend/)
+Run with: uvicorn app.main:app --reload --port 3001  (from backend/)
 """
 
 from __future__ import annotations

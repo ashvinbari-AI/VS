@@ -4,7 +4,7 @@ import {
   Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
-  Users, FileText, Image, Clapperboard, Heart, MessageCircle, Eye, Flame, Trophy,
+  Users, FileText, Image, Clapperboard, Heart, MessageCircle, Eye, Flame,
 } from "lucide-react";
 import { AsyncBoundary } from "../components/Loading/AsyncBoundary";
 import { KpiCompareCard } from "../components/KPI/KpiCompareCard";
@@ -12,39 +12,35 @@ import { ChartCard } from "../components/Charts/ChartCard";
 import { SelectPeoplePrompt } from "../components/EmptyState/SelectPeoplePrompt";
 import { DataTable } from "../components/Tables/DataTable";
 import { ProofDrawer, type ProofRequest } from "../components/Proof/ProofDrawer";
+import { Section } from "../components/Layout/Section";
 import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
-import { useFilters } from "../state/FilterContext";
+import { comparisonDeps, comparisonParams, useFilters, type SelectedPerson } from "../state/FilterContext";
 import { fmtCompact, fmtDate, fmtNum } from "../utils/format";
-import { COLOR_GRID, COLOR_PRIMARY, COLOR_SECONDARY } from "../utils/theme";
+import { COLOR_GRID } from "../utils/theme";
 
-const COLOR_A = COLOR_PRIMARY;
-const COLOR_B = COLOR_SECONDARY;
+type PerPerson<T> = Record<string, T>;
 
 interface OverviewResponse {
-  kpis: { person_a: any; person_b: any };
+  person_ids: string[];
+  kpis: PerPerson<any>;
   charts: {
-    content_activity_timeline: { date: string; person_a: number; person_b: number }[];
-    engagement_timeline: { date: string; person_a: number | null; person_b: number | null }[];
-    platform_distribution: { person_a: Record<string, number>; person_b: Record<string, number> };
-    content_type_distribution: { person_a: Record<string, number>; person_b: Record<string, number> };
-    engagement_comparison: { person_a: Record<string, number | null>; person_b: Record<string, number | null> };
+    // Rows are {date, <person_id>: value, ...}
+    content_activity_timeline: Record<string, any>[];
+    engagement_timeline: Record<string, any>[];
+    platform_distribution: PerPerson<Record<string, number>>;
+    content_type_distribution: PerPerson<Record<string, number>>;
+    engagement_comparison: PerPerson<Record<string, number | null>>;
     top_content: any[];
   };
 }
 
 export default function Overview() {
-  const { filters, personAName, personBName } = useFilters();
-  const ready = !!filters.personA && !!filters.personB;
+  const { filters, selected, ready } = useFilters();
 
   const { data, loading, error, reload } = useApi<OverviewResponse>(
-    () =>
-      api.get("/overview", {
-        person_a: filters.personA, person_b: filters.personB,
-        platform: filters.platform, content_type: filters.contentType,
-        date_from: filters.dateFrom, date_to: filters.dateTo,
-      }),
-    [filters.personA, filters.personB, filters.platform, filters.contentType, filters.dateFrom],
+    () => api.get("/overview", comparisonParams(filters)),
+    comparisonDeps(filters),
     ready
   );
 
@@ -54,8 +50,7 @@ export default function Overview() {
     <AsyncBoundary loading={loading} error={error} onRetry={reload}>
       {data && (
         <OverviewBody
-          data={data} nameA={personAName} nameB={personBName}
-          idA={filters.personA} idB={filters.personB}
+          data={data} people={selected}
           proofFilters={{ platform: filters.platform, contentType: filters.contentType, dateFrom: filters.dateFrom ?? undefined }}
         />
       )}
@@ -64,32 +59,37 @@ export default function Overview() {
 }
 
 function OverviewBody({
-  data, nameA, nameB, idA, idB, proofFilters,
+  data, people, proofFilters,
 }: {
-  data: OverviewResponse; nameA: string; nameB: string; idA: string; idB: string;
+  data: OverviewResponse; people: SelectedPerson[];
   proofFilters: { platform?: string; contentType?: string; dateFrom?: string };
 }) {
-  const a = data.kpis.person_a;
-  const b = data.kpis.person_b;
   const [proof, setProof] = useState<ProofRequest | null>(null);
 
   const openProof = (metric: string, label: string) => () =>
-    setProof({ personAId: idA, personAName: nameA, personBId: idB, personBName: nameB, metric, label, ...proofFilters });
+    setProof({ people, metric, label, ...proofFilters });
+
+  /** Every person's formatted value of one KPI, for a KpiCompareCard. */
+  const kpi = (fmt: (k: any) => string) =>
+    people.map((p) => ({ ...p, value: fmt(data.kpis[p.id] ?? {}) }));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <ProofDrawer request={proof} onClose={() => setProof(null)} />
+      <Section title="Key numbers" description="Click any card to see exactly how the number was calculated.">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCompareCard icon={Users} label="Followers" valueA={fmtCompact(a.followers)} valueB={fmtCompact(b.followers)} labelA={nameA} labelB={nameB} onProof={openProof("followers", "Followers")} />
-        <KpiCompareCard icon={FileText} label="Total Content" valueA={fmtNum(a.total_content)} valueB={fmtNum(b.total_content)} labelA={nameA} labelB={nameB} onProof={openProof("total_content", "Total Content")} />
-        <KpiCompareCard icon={Image} label="Posts" valueA={fmtNum(a.posts)} valueB={fmtNum(b.posts)} labelA={nameA} labelB={nameB} onProof={openProof("posts", "Posts")} />
-        <KpiCompareCard icon={Clapperboard} label="Reels" valueA={fmtNum(a.reels)} valueB={fmtNum(b.reels)} labelA={nameA} labelB={nameB} onProof={openProof("reels", "Reels")} />
-        <KpiCompareCard icon={Heart} label="Total Likes" valueA={fmtNum(a.total_likes)} valueB={fmtNum(b.total_likes)} labelA={nameA} labelB={nameB} onProof={openProof("total_likes", "Total Likes")} />
-        <KpiCompareCard icon={MessageCircle} label="Total Comments" valueA={fmtNum(a.total_comments_count)} valueB={fmtNum(b.total_comments_count)} labelA={nameA} labelB={nameB} onProof={openProof("total_comments_count", "Total Comments")} />
-        <KpiCompareCard icon={Eye} label="View Engagement" valueA={fmtNum(a.view_engagement)} valueB={fmtNum(b.view_engagement)} labelA={nameA} labelB={nameB} sublabel="post + reel views" onProof={openProof("view_engagement", "View Engagement")} />
-        <KpiCompareCard icon={Flame} label="Total Engagement" valueA={fmtNum(a.total_engagement)} valueB={fmtNum(b.total_engagement)} labelA={nameA} labelB={nameB} onProof={openProof("total_engagement", "Total Engagement")} />
+        <KpiCompareCard icon={Users} label="Followers" values={kpi((k) => fmtCompact(k.followers))} onProof={openProof("followers", "Followers")} />
+        <KpiCompareCard icon={FileText} label="Total Content" values={kpi((k) => fmtNum(k.total_content))} onProof={openProof("total_content", "Total Content")} />
+        <KpiCompareCard icon={Image} label="Posts" values={kpi((k) => fmtNum(k.posts))} onProof={openProof("posts", "Posts")} />
+        <KpiCompareCard icon={Clapperboard} label="Reels" values={kpi((k) => fmtNum(k.reels))} onProof={openProof("reels", "Reels")} />
+        <KpiCompareCard icon={Heart} label="Total Likes" values={kpi((k) => fmtNum(k.total_likes))} onProof={openProof("total_likes", "Total Likes")} />
+        <KpiCompareCard icon={MessageCircle} label="Total Comments" values={kpi((k) => fmtNum(k.total_comments_count))} onProof={openProof("total_comments_count", "Total Comments")} />
+        <KpiCompareCard icon={Eye} label="View Engagement" values={kpi((k) => fmtNum(k.view_engagement))} sublabel="post + reel views" onProof={openProof("view_engagement", "View Engagement")} />
+        <KpiCompareCard icon={Flame} label="Total Engagement" values={kpi((k) => fmtNum(k.total_engagement))} onProof={openProof("total_engagement", "Total Engagement")} />
       </div>
+      </Section>
 
+      <Section title="Trends" description="Daily posting and engagement over the selected period.">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ChartCard title="Content Activity Timeline">
           <ResponsiveContainer width="100%" height={260}>
@@ -99,8 +99,9 @@ function OverviewBody({
               <YAxis tick={{ fontSize: 11, fill: "#8B93A7" }} allowDecimals={false} axisLine={false} tickLine={false} />
               <Tooltip labelFormatter={(d) => fmtDate(String(d))} contentStyle={{ borderRadius: 10, borderColor: COLOR_GRID, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="person_a" name={nameA} stroke={COLOR_A} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} animationDuration={500} />
-              <Line type="monotone" dataKey="person_b" name={nameB} stroke={COLOR_B} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} animationDuration={500} />
+              {people.map((p) => (
+                <Line key={p.id} type="monotone" dataKey={p.id} name={p.name} stroke={p.color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} animationDuration={500} />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -113,48 +114,52 @@ function OverviewBody({
               <YAxis tick={{ fontSize: 11, fill: "#8B93A7" }} axisLine={false} tickLine={false} />
               <Tooltip labelFormatter={(d) => fmtDate(String(d))} contentStyle={{ borderRadius: 10, borderColor: COLOR_GRID, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="person_a" name={nameA} stroke={COLOR_A} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls animationDuration={500} />
-              <Line type="monotone" dataKey="person_b" name={nameB} stroke={COLOR_B} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls animationDuration={500} />
+              {people.map((p) => (
+                <Line key={p.id} type="monotone" dataKey={p.id} name={p.name} stroke={p.color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls animationDuration={500} />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
 
+      </div>
+      </Section>
+
+      <Section title="Breakdown" description="What each person posts, and the totals it earned.">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ChartCard title="Content Type Distribution">
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={mergeDist(data.charts.content_type_distribution)}>
+            <BarChart data={mergeDist(data.charts.content_type_distribution, people)}>
               <CartesianGrid strokeDasharray="3 3" stroke={COLOR_GRID} vertical={false} />
               <XAxis dataKey="key" tick={{ fontSize: 11, fill: "#8B93A7" }} axisLine={{ stroke: COLOR_GRID }} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: "#8B93A7" }} allowDecimals={false} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ borderRadius: 10, borderColor: COLOR_GRID, fontSize: 12 }} cursor={{ fill: "rgba(22,48,90,0.04)" }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="person_a" name={nameA} fill={COLOR_A} radius={[4, 4, 0, 0]} animationDuration={500} />
-              <Bar dataKey="person_b" name={nameB} fill={COLOR_B} radius={[4, 4, 0, 0]} animationDuration={500} />
+              {people.map((p) => (
+                <Bar key={p.id} dataKey={p.id} name={p.name} fill={p.color} radius={[4, 4, 0, 0]} animationDuration={500} />
+              ))}
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
 
         <ChartCard title="Engagement Comparison">
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={engagementComparisonRows(data.charts.engagement_comparison)}>
+            <BarChart data={engagementComparisonRows(data.charts.engagement_comparison, people)}>
               <CartesianGrid strokeDasharray="3 3" stroke={COLOR_GRID} vertical={false} />
               <XAxis dataKey="metric" tick={{ fontSize: 11, fill: "#8B93A7" }} axisLine={{ stroke: COLOR_GRID }} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#8B93A7" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: "#8B93A7" }} axisLine={false} tickLine={false} tickFormatter={fmtCompact} />
               <Tooltip contentStyle={{ borderRadius: 10, borderColor: COLOR_GRID, fontSize: 12 }} cursor={{ fill: "rgba(22,48,90,0.04)" }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="person_a" name={nameA} fill={COLOR_A} radius={[4, 4, 0, 0]} animationDuration={500} />
-              <Bar dataKey="person_b" name={nameB} fill={COLOR_B} radius={[4, 4, 0, 0]} animationDuration={500} />
+              {people.map((p) => (
+                <Bar key={p.id} dataKey={p.id} name={p.name} fill={p.color} radius={[4, 4, 0, 0]} animationDuration={500} />
+              ))}
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
       </div>
 
-      <div>
-        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-dark">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gold/15 text-gold-700">
-            <Trophy size={13} strokeWidth={2.25} />
-          </span>
-          Top Performing Content
-        </h3>
+      </Section>
+
+      <Section title="Top performing content" description="The 10 highest-engagement posts across everyone selected.">
         <DataTable
           rows={data.charts.top_content}
           keyFn={(r) => r.content_id}
@@ -169,23 +174,26 @@ function OverviewBody({
             { key: "engagement", header: "Engagement", render: (r) => fmtNum(r.engagement), align: "right", sortable: true, sortValue: (r) => r.engagement },
           ]}
         />
-      </div>
+      </Section>
     </div>
   );
 }
 
-function mergeDist(dist: { person_a: Record<string, number>; person_b: Record<string, number> }) {
-  const keys = new Set([...Object.keys(dist.person_a || {}), ...Object.keys(dist.person_b || {})]);
+/** Union of category keys across every person; a key someone lacks is 0. */
+function mergeDist(dist: PerPerson<Record<string, number>>, people: SelectedPerson[]) {
+  const keys = new Set(people.flatMap((p) => Object.keys(dist[p.id] ?? {})));
   return Array.from(keys).map((key) => ({
-    key, person_a: dist.person_a?.[key] ?? 0, person_b: dist.person_b?.[key] ?? 0,
+    key,
+    ...Object.fromEntries(people.map((p) => [p.id, dist[p.id]?.[key] ?? 0])),
   }));
 }
 
-function engagementComparisonRows(cmp: { person_a: Record<string, number | null>; person_b: Record<string, number | null> }) {
+function engagementComparisonRows(cmp: PerPerson<Record<string, number | null>>, people: SelectedPerson[]) {
   const labels: Record<string, string> = {
     total_likes: "Total Likes", total_comments: "Total Comments", total_shares: "Total Shares", total_engagement: "Total Engagement",
   };
   return Object.keys(labels).map((k) => ({
-    metric: labels[k], person_a: cmp.person_a?.[k] ?? 0, person_b: cmp.person_b?.[k] ?? 0,
+    metric: labels[k],
+    ...Object.fromEntries(people.map((p) => [p.id, cmp[p.id]?.[k] ?? 0])),
   }));
 }

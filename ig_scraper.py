@@ -84,7 +84,10 @@ except ValueError:
 PAGE_PAUSE = (3.0, 5.0)        # random.uniform range, seconds -- after a profile load
 POST_PAUSE = (1.5, 2.5)        # before opening a post tab
 SCROLL_PAUSE = 1.0             # inside the comment column
-MAX_COMMENT_SCROLLS = 100
+# Safety ceiling only -- NO_GROWTH_ROUNDS is what normally ends the scroll.
+# Each scroll loads ~10-15 comments, so the old cap of 100 silently stopped
+# big posts at ~1,000-1,500 comments.
+MAX_COMMENT_SCROLLS = 1500
 MAX_REEL_VIEW_SCROLLS = 20     # scrolling the Reels tab to collect view counts
 NO_GROWTH_ROUNDS = 4           # stop scrolling after this many static rounds
 NAV_TIMEOUT_S = 15
@@ -826,7 +829,11 @@ def cmd_scrape(args) -> None:
     run_started = datetime.now().astimezone()
     run_id = make_run_id(run_started)
     t0 = time.perf_counter()
-    profile = re.sub(r"/+$", "", args.url).split("/")[-1].split("?")[0]
+    # Drop ?hl=en / #... first: everything below appends paths to this URL
+    # ("/reels/"), and a query string left on it sent the Reels-tab view-count
+    # walk to the plain profile page -- every reel came back with no views.
+    args.url = args.url.split("#")[0].split("?")[0].rstrip("/") + "/"
+    profile = args.url.rstrip("/").split("/")[-1]
 
     out = Path(args.out)
     store = Phase1Store(out)
@@ -1016,15 +1023,21 @@ def scrape_one_post(driver, url, pinned, post_type, view_count, since, until, st
 
         post_id = post_id_for(url)
         comments = [build_comment(r, post_id, url) for r in rows]
-        store.upsert_post(
-            build_post(meta, url, profile, header, len(comments), post_type, view_count),
-            run_id)
+        post_doc = build_post(meta, url, profile, header, len(comments), post_type, view_count)
+        if args.no_comments:
+            # Metadata-only refresh (likes, views): comments weren't read this
+            # run, so keep the earlier capture count rather than resetting it.
+            post_doc["comments_captured"] = (store.posts.get(post_id) or {}).get("comments_captured", 0)
+        store.upsert_post(post_doc, run_id)
         seen_ids = set()
         for c in comments:
             store.upsert_comment(c, run_id)
             seen_ids.add(c["comment_id"])
             store.upsert_user(c["user_id"], c["user_name"], c["user_profile_url"])
-        store.mark_missing(post_id, seen_ids, run_id)
+        if not args.no_comments:
+            # Only a real harvest can say a comment is gone -- with
+            # --no-comments every stored comment would be wrongly flagged.
+            store.mark_missing(post_id, seen_ids, run_id)
         store.flush()      # commit per post: an interrupt keeps what was collected
 
         claimed = meta.get("comment_count") or 0

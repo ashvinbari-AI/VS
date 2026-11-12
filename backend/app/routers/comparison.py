@@ -5,9 +5,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 
 from app.analytics import engine as eng
-from app.analytics.comparison import calculate_comparison_metrics
+from app.analytics.comparison import calculate_multi_comparison
 from app.analytics.filters import filter_content
 from app.models.common import ApiResponse
+from app.routers.people_params import parse_person_ids
 from app.storage.data_source import get_comments_df, get_content_df, get_profiles_df, latest_followers
 
 router = APIRouter(prefix="/api/comparison", tags=["comparison"])
@@ -24,38 +25,41 @@ _RADAR_METRIC_MAP = {
 }
 
 
-def _normalize_pair(a: float | None, b: float | None) -> tuple[float | None, float | None]:
-    if a is None or b is None:
-        return None, None
-    hi = max(a, b, 1e-9)
-    return round(a / hi * 100, 1), round(b / hi * 100, 1)
+def _normalize(values: dict[str, float | None]) -> dict[str, float | None]:
+    """Scale every person's value so the highest = 100. If anyone's value is
+    missing the whole dimension is left unnormalized (None) rather than
+    scaled against an incomplete set."""
+    if any(v is None for v in values.values()):
+        return {pid: None for pid in values}
+    hi = max([*values.values(), 1e-9])
+    return {pid: round(v / hi * 100, 1) for pid, v in values.items()}
 
 
 @router.get("")
 def get_comparison(
-    person_a: str = Query(...), person_b: str = Query(...),
+    person_ids: list[str] = Query(...),
     platform: str | None = None, content_type: str | None = None,
     date_from: str | None = None, date_to: str | None = None,
     period_days: int = 30,
 ) -> ApiResponse:
+    ids = parse_person_ids(person_ids)
     content = get_content_df()
     comments = get_comments_df()
     profiles = get_profiles_df()
 
-    df_a = filter_content(content, person_ids=[person_a], platform=platform,
-                           content_type=content_type, date_from=date_from, date_to=date_to)
-    df_b = filter_content(content, person_ids=[person_b], platform=platform,
-                           content_type=content_type, date_from=date_from, date_to=date_to)
-    comments_a = comments[comments["person_id"] == person_a] if not comments.empty else comments
-    comments_b = comments[comments["person_id"] == person_b] if not comments.empty else comments
+    dfs = {
+        pid: filter_content(content, person_ids=[pid], platform=platform,
+                            content_type=content_type, date_from=date_from, date_to=date_to)
+        for pid in ids
+    }
+    person_comments = {
+        pid: comments[comments["person_id"] == pid] if not comments.empty else comments
+        for pid in ids
+    }
+    followers = {pid: latest_followers(profiles, pid) for pid in ids}
 
-    followers_a = latest_followers(profiles, person_a)
-    followers_b = latest_followers(profiles, person_b)
-
-    result = calculate_comparison_metrics(
-        person_a, person_b, df_a, df_b, comments_a, comments_b,
-        followers_a, followers_b, period_days,
-    )
+    result = calculate_multi_comparison(ids, dfs, person_comments, followers, period_days)
+    people = result["people"]
 
     # Narrative diversity (needs narrative column, added by NLP pass if it ran)
     def diversity(df):
@@ -64,32 +68,20 @@ def get_comparison(
         counts = df["narrative"].dropna().value_counts().to_dict()
         return eng.calculate_narrative_diversity(counts) if counts else None
 
-    # Activity consistency
-    consistency_a = eng.calculate_activity_consistency(df_a)
-    consistency_b = eng.calculate_activity_consistency(df_b)
-
-    radar_raw = {
-        "Activity": (result["person_a"]["posting_frequency_per_day"],
-                     result["person_b"]["posting_frequency_per_day"]),
-        "Engagement": (result["person_a"]["average_engagement"],
-                       result["person_b"]["average_engagement"]),
-        "Audience": (followers_a, followers_b),
-        "Content volume": (result["person_a"]["total_content"], result["person_b"]["total_content"]),
-        "Comment response": (result["person_a"]["average_comments"], result["person_b"]["average_comments"]),
-    }
     radar = {}
-    for dim, (a, b) in radar_raw.items():
-        na, nb = _normalize_pair(a, b)
-        radar[dim] = {"person_a": na, "person_b": nb, "raw_person_a": a, "raw_person_b": b}
+    for dim, metric_key in _RADAR_METRIC_MAP.items():
+        raw = {pid: (followers[pid] if metric_key == "followers" else people[pid][metric_key]) for pid in ids}
+        radar[dim] = {"values": _normalize(raw), "raw": raw}
 
     return ApiResponse.ok({
+        "person_ids": ids,
         **result,
-        "narrative_diversity": {"person_a": diversity(df_a), "person_b": diversity(df_b)},
-        "activity_consistency": {"person_a": consistency_a, "person_b": consistency_b},
+        "narrative_diversity": {pid: diversity(dfs[pid]) for pid in ids},
+        "activity_consistency": {pid: eng.calculate_activity_consistency(dfs[pid]) for pid in ids},
         "normalized_analytics_index": {
             "note": "Each dimension is a min-max normalization (0-100) of a deterministic "
-                    "metric, scaled to the higher of the two people = 100. This is a display "
-                    "convenience, not a political influence score.",
+                    "metric, scaled to the highest of the selected people = 100. This is a "
+                    "display convenience, not a political influence score.",
             "dimensions": radar,
         },
     })

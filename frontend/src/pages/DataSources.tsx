@@ -1,9 +1,10 @@
-import { History, Pencil, PlayCircle, Plus, RefreshCw, UploadCloud, X } from "lucide-react";
+import { History, Pencil, PlayCircle, Plus, RefreshCw, Trash2, UploadCloud, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../components/Toast/ToastProvider";
 import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
+import { useFilters } from "../state/FilterContext";
 import type { PersonConfig } from "../types/api";
 import { fmtDate, fmtDateTime, fmtNum } from "../utils/format";
 
@@ -44,9 +45,9 @@ export default function DataSources() {
     // had a result.
     if (!window.confirm(
       "Force re-analyze ALL content and comments, ignoring cached results?\n\n" +
-      "This re-runs narrative/sentiment/theme/issue classification for every row " +
-      "(local models/lexicon), and if Gemini NLP is enabled, re-classifies Comment " +
-      "Sentiment via Gemini too -- which uses API quota. This can take a while on a " +
+      "This re-runs narrative (posts) and sentiment/theme/issue classification (comments) " +
+      "for every row (local models/lexicon), and if Gemini NLP is enabled, re-classifies " +
+      "Comment Sentiment via Gemini too -- which uses API quota. This can take a while on a " +
       "large dataset."
     )) return;
     setJobStatus("Starting forced re-analysis...");
@@ -301,6 +302,34 @@ function PersonCard({
   // The scrape's --days window -- previously hardcoded to 30 with no way
   // to change it from the UI at all.
   const [days, setDays] = useState(30);
+  const [deleting, setDeleting] = useState(false);
+  const { filters, setFilters, refresh } = useFilters();
+
+  const deletePerson = async () => {
+    const ok = window.confirm(
+      `Delete "${person.name}" and ALL of their data?
+
+` +
+      "This permanently removes their profile, every scraped post and comment, " +
+      "scrape history and analysis results. This cannot be undone."
+    );
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      await api.del(`/profiles/${person.id}`);
+      // Don't leave a deleted person selected in the comparison filters.
+      if (filters.personIds.includes(person.id)) {
+        setFilters({ personIds: filters.personIds.filter((id) => id !== person.id) });
+      }
+      refresh();
+      toast.show({ kind: "success", title: "Profile deleted", message: `${person.name} and all their data were removed.` });
+      onChanged();
+    } catch (e: any) {
+      toast.show({ kind: "error", title: "Delete failed", message: e.message });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const saveEdit = async () => {
     setSaving(true);
@@ -374,6 +403,13 @@ function PersonCard({
             </button>
             <button onClick={() => onViewHistory({ id: person.id, name: person.name })} className="flex items-center gap-1 rounded-md border border-silver/80 px-3 py-1.5 text-xs font-medium hover:bg-silver/10">
               <History size={12} /> History
+            </button>
+            <button
+              onClick={deletePerson}
+              disabled={deleting}
+              className="flex items-center gap-1 rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              <Trash2 size={12} /> {deleting ? "Deleting..." : "Delete"}
             </button>
             <label className="flex items-center gap-1.5 text-xs text-dark/60" title="How many days back to scrape from today">
               Days

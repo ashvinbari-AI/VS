@@ -7,30 +7,29 @@ import { SelectPeoplePrompt } from "../components/EmptyState/SelectPeoplePrompt"
 import { EmptyState } from "../components/EmptyState/EmptyState";
 import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
-import { useFilters } from "../state/FilterContext";
+import { comparisonDeps, comparisonParams, useFilters } from "../state/FilterContext";
+import type { GlobalFilters } from "../types/api";
 
 const SENTIMENT_COLORS: Record<string, string> = {
   Positive: "#0f9d58", Neutral: "#94A3B8", Negative: "#d93025", "Mixed/Unclear": "#F5A623",
 };
 
 export default function SentimentPage() {
-  const { filters, setFilters, personAName, personBName } = useFilters();
+  const { filters, setFilters, selected, ready } = useFilters();
   const [searchParams, setSearchParams] = useSearchParams();
   const restored = useRef(false);
 
   // Restores the exact person/platform/date selection that was active when
   // a donut slice was clicked open in another tab -- the back arrow on
   // /sentiment/detail lands here with that snapshot in the URL so this page
-  // never comes back blank ("Select Person A/B" again) after drilling in.
+  // never comes back blank (no people selected again) after drilling in.
   useEffect(() => {
     if (restored.current) return;
-    const rPersonA = searchParams.get("restorePersonA");
-    const rPersonB = searchParams.get("restorePersonB");
-    if (!rPersonA && !rPersonB) return;
+    const rPeople = searchParams.get("restorePersonIds");
+    if (!rPeople) return;
     restored.current = true;
     setFilters({
-      personA: rPersonA ?? filters.personA,
-      personB: rPersonB ?? filters.personB,
+      personIds: rPeople.split(",").filter(Boolean),
       platform: (searchParams.get("restorePlatform") as typeof filters.platform) ?? filters.platform,
       contentType: (searchParams.get("restoreContentType") as typeof filters.contentType) ?? filters.contentType,
       dateFrom: searchParams.get("restoreDateFrom") ?? filters.dateFrom,
@@ -40,13 +39,9 @@ export default function SentimentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  const ready = !!filters.personA && !!filters.personB;
   const { data, loading, error, reload } = useApi<any>(
-    () => api.get("/sentiment", {
-      person_a: filters.personA, person_b: filters.personB, platform: filters.platform,
-      content_type: filters.contentType, date_from: filters.dateFrom, date_to: filters.dateTo,
-    }),
-    [filters.personA, filters.personB, filters.platform, filters.contentType, filters.dateFrom],
+    () => api.get("/sentiment", comparisonParams(filters)),
+    comparisonDeps(filters),
     ready
   );
 
@@ -55,22 +50,23 @@ export default function SentimentPage() {
   return (
     <AsyncBoundary loading={loading} error={error} onRetry={reload}>
       {data && !data.analysis_available && (
-        <EmptyState title="Sentiment analysis not run yet" message='Click "Run Analysis" on the Data Sources page to classify post/comment sentiment.' />
+        <EmptyState title="Sentiment analysis not run yet" message='Click "Run Analysis" on the Data Sources page to classify comment sentiment.' />
       )}
       {data && data.analysis_available && (
         <div className="space-y-6">
           <div className="rounded-md border border-navy/20 bg-navy/5 px-4 py-2 text-xs text-navy">
             {data.label} -- an AI/model-based classification, not verified ground truth.
           </div>
+          <p className="text-[11px] text-dark/40">
+            The day filter above applies by each comment's parent post's publish date -- comments themselves
+            have no reliable timestamp in the scraped data, so a comment on an older post won't appear even if
+            it was posted recently.
+          </p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <DonutCard title={`Post Sentiment -- ${personAName}`} dist={data.post_sentiment.person_a}
-              kind="post" personId={filters.personA} personName={personAName} filters={filters} />
-            <DonutCard title={`Post Sentiment -- ${personBName}`} dist={data.post_sentiment.person_b}
-              kind="post" personId={filters.personB} personName={personBName} filters={filters} />
-            <DonutCard title={`Comment Sentiment -- ${personAName}`} dist={data.comment_sentiment.person_a}
-              kind="comment" personId={filters.personA} personName={personAName} filters={filters} />
-            <DonutCard title={`Comment Sentiment -- ${personBName}`} dist={data.comment_sentiment.person_b}
-              kind="comment" personId={filters.personB} personName={personBName} filters={filters} />
+            {selected.map((p) => (
+              <DonutCard key={p.id} title={`Comment Sentiment -- ${p.name}`} dist={data.comment_sentiment[p.id]}
+                personId={p.id} personName={p.name} filters={filters} />
+            ))}
           </div>
         </div>
       )}
@@ -79,38 +75,35 @@ export default function SentimentPage() {
 }
 
 function DonutCard({
-  title, dist, kind, personId, personName, filters,
+  title, dist, personId, personName, filters,
 }: {
   title: string;
   dist: Record<string, number>;
-  kind: "post" | "comment";
   personId?: string;
   personName?: string;
-  filters: { personA: string; personB: string; platform?: string; contentType?: string; dateFrom?: string | null; dateTo?: string | null };
+  filters: GlobalFilters;
 }) {
   const entries = Object.entries(dist || {});
 
   const openDetail = (label: string) => {
     if (!personId) return;
-    const params = new URLSearchParams({ person: personId, name: personName ?? "", kind, label });
-    // Comment-sentiment counts here come from /api/sentiment, which (like
-    // /api/comments) only filters comments by person -- most comment rows
-    // have no reliable timestamp, so platform/date aren't applied to them.
-    // Passing those through here would just make the drilldown mismatch
-    // the count on the slice a person clicked.
-    if (kind === "post") {
-      if (filters.platform) params.set("platform", filters.platform);
-      if (filters.contentType) params.set("contentType", filters.contentType);
-      if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-      if (filters.dateTo) params.set("dateTo", filters.dateTo);
-    }
+    const params = new URLSearchParams({ person: personId, name: personName ?? "", label });
+    // Comments have no reliable timestamp of their own, so both this donut
+    // (/api/sentiment) and the drilldown (/api/comments/list) filter
+    // platform/content_type/date via the comment's *parent post* instead
+    // (filter_comments_by_post, backend/app/analytics/filters.py) -- passing
+    // the same filters through here keeps the drilldown's count matching
+    // the slice that was clicked.
+    if (filters.platform) params.set("platform", filters.platform);
+    if (filters.contentType) params.set("contentType", filters.contentType);
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
     // A full snapshot of the comparison in view when this slice was
     // clicked -- the back arrow on the detail page uses this to restore
     // /sentiment exactly as it was, instead of coming back to blank
-    // Person A/B pickers (this opens in a new tab with its own fresh
+    // people pickers (this opens in a new tab with its own fresh
     // FilterContext, which starts with nothing selected).
-    params.set("restorePersonA", filters.personA);
-    params.set("restorePersonB", filters.personB);
+    params.set("restorePersonIds", filters.personIds.join(","));
     if (filters.platform) params.set("restorePlatform", filters.platform);
     if (filters.contentType) params.set("restoreContentType", filters.contentType);
     if (filters.dateFrom) params.set("restoreDateFrom", filters.dateFrom);
@@ -141,7 +134,7 @@ function DonutCard({
               <Legend />
             </PieChart>
           </ResponsiveContainer>
-          <p className="mt-1 text-center text-[11px] text-dark/40">Click a slice to open the underlying {kind}s in a new tab.</p>
+          <p className="mt-1 text-center text-[11px] text-dark/40">Click a slice to open the underlying comments in a new tab.</p>
         </>
       )}
     </div>

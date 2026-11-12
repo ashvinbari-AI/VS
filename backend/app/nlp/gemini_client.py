@@ -1,11 +1,14 @@
 """
 Thin, defensive wrapper around google-generativeai.
 
-Used ONLY for narrative classification / sentiment / comment themes / issue
-extraction (spec section 33) -- never for core metrics. Every call is
-wrapped so that a missing package, missing key, rate limit, or network
-failure degrades to "Gemini unavailable" rather than crashing the request;
-callers must fall back to the rule-based engine on None.
+This wrapper itself is generic (any caller can send it a prompt), but in
+practice app/nlp/engine.py only ever calls it for Comment Sentiment --
+narrative/comment-theme/issue-extraction and post-level sentiment (removed
+entirely) always stay on the local/rule-based tiers, never Gemini (spec
+section 33) -- and it's never used for core metrics. Every call is wrapped
+so that a missing package, missing key, rate limit, or network failure
+degrades to "Gemini unavailable" rather than crashing the request; callers
+must fall back to the rule-based engine on None.
 """
 
 from __future__ import annotations

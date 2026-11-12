@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query
 from app.analytics import engine as eng
 from app.analytics.filters import filter_content
 from app.models.common import ApiResponse
+from app.routers.people_params import parse_person_ids
 from app.storage.data_source import get_content_df
 
 router = APIRouter(prefix="/api/activity", tags=["activity"])
@@ -33,17 +34,16 @@ def _activity_block(df, period_days: int) -> dict:
 
 @router.get("")
 def get_activity(
-    person_a: str = Query(...), person_b: str = Query(...),
+    person_ids: list[str] = Query(...),
     platform: str | None = None, content_type: str | None = None,
     date_from: str | None = None, date_to: str | None = None,
     period_days: int = 30,
 ) -> ApiResponse:
+    ids = parse_person_ids(person_ids)
     content = get_content_df()
-    df_a = filter_content(content, person_ids=[person_a], platform=platform,
-                           content_type=content_type, date_from=date_from, date_to=date_to)
-    df_b = filter_content(content, person_ids=[person_b], platform=platform,
-                           content_type=content_type, date_from=date_from, date_to=date_to)
-    return ApiResponse.ok({
-        "person_a": _activity_block(df_a, period_days),
-        "person_b": _activity_block(df_b, period_days),
-    })
+    people = {}
+    for pid in ids:
+        df = filter_content(content, person_ids=[pid], platform=platform,
+                            content_type=content_type, date_from=date_from, date_to=date_to)
+        people[pid] = _activity_block(df, period_days)
+    return ApiResponse.ok({"person_ids": ids, "people": people})

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Download, Loader2, Trophy } from "lucide-react";
 import {
-  Bar, BarChart, CartesianGrid, Legend, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart,
+  Bar, BarChart, CartesianGrid, LabelList, Legend,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import jsPDF from "jspdf";
@@ -10,42 +10,78 @@ import { AsyncBoundary } from "../components/Loading/AsyncBoundary";
 import { SelectPeoplePrompt } from "../components/EmptyState/SelectPeoplePrompt";
 import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
-import { useFilters } from "../state/FilterContext";
-import { fmtDate, fmtNum, fmtPct } from "../utils/format";
+import { comparisonDeps, comparisonParams, useFilters, type SelectedPerson } from "../state/FilterContext";
+import { fmtCompact, fmtDate, fmtNum, fmtPct } from "../utils/format";
 import { svgToPng } from "../utils/chartExport";
-import { COLOR_GRID, COLOR_PRIMARY, COLOR_SECONDARY } from "../utils/theme";
+import { COLOR_GRID } from "../utils/theme";
 
 type Row = (string | number)[];
+type Dist = Record<string, number> | undefined;
 
-/** Union of the keys across both distribution dicts (post/comment sentiment,
- * theme breakdowns, ...), so a label either side doesn't have shows as 0
- * rather than being silently dropped from the table. */
-function mergeDist(a: Record<string, number> | undefined, b: Record<string, number> | undefined): Row[] {
-  const labels = Array.from(new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])).sort();
-  return labels.map((label) => [label, fmtNum(a?.[label] ?? 0), fmtNum(b?.[label] ?? 0)]);
+/** Union of the keys across every person's distribution dict (comment
+ * sentiment, theme breakdowns, ...), so a label someone doesn't have shows
+ * as 0 rather than being silently dropped from the table. */
+function mergeDist(dists: Dist[]): Row[] {
+  const labels = Array.from(new Set(dists.flatMap((d) => Object.keys(d ?? {})))).sort();
+  return labels.map((label) => [label, ...dists.map((d) => fmtNum(d?.[label] ?? 0))]);
 }
 
-type Pair = { name: string; a: number; b: number };
+/** One chart category: {name, <person_id>: value, ...}. */
+type Group = { name: string } & Record<string, number | string>;
 
 /** Same union-of-labels merge as mergeDist, but numeric so it can be charted. */
-function distPairs(a: Record<string, number> | undefined, b: Record<string, number> | undefined): Pair[] {
-  const labels = Array.from(new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])).sort();
-  return labels.map((name) => ({ name, a: a?.[name] ?? 0, b: b?.[name] ?? 0 }));
+function distGroups(people: SelectedPerson[], dists: Dist[]): Group[] {
+  const labels = Array.from(new Set(dists.flatMap((d) => Object.keys(d ?? {})))).sort();
+  return labels.map((name) => ({
+    name,
+    ...Object.fromEntries(people.map((p, i) => [p.id, dists[i]?.[name] ?? 0])),
+  }) as Group);
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.replace("#", ""), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
 const AXIS_TICK = { fontSize: 11, fill: "#5B6478" };
+const VALUE_LABEL = { fontSize: 10, fill: "#334155" };
+/** Same bar thickness on every chart, however few categories it has. */
+const BAR_MAX = 36;
 
 /** Card shell for one chart. The data-pdf-* attributes let handleDownload
  * find every rendered chart in on-screen order and place it in the PDF. */
-function ChartPanel({ title, note, wide, children }: { title: string; note?: string; wide?: boolean; children: React.ReactNode }) {
+function ChartPanel({ title, note, wide, inPdf, onTogglePdf, children }: {
+  title: string; note?: string; wide?: boolean;
+  /** Pass both to show an "Include in PDF" switch; off drops the chart from the download. */
+  inPdf?: boolean; onTogglePdf?: (on: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const included = inPdf ?? true;
   return (
     <div
       data-pdf-chart
       data-pdf-title={title}
       data-pdf-wide={wide ? "1" : "0"}
+      data-pdf-include={included ? "1" : "0"}
       className={`rounded-xl border border-silver/60 bg-white p-4 shadow-card ${wide ? "lg:col-span-2" : ""}`}
     >
-      <h3 className="text-sm font-semibold text-dark">{title}</h3>
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-sm font-semibold text-dark">{title}</h3>
+        {onTogglePdf && (
+          <label className="flex shrink-0 cursor-pointer select-none items-center gap-2 text-xs text-dark/60">
+            Include in PDF
+            <button
+              type="button"
+              role="switch"
+              aria-checked={included}
+              onClick={() => onTogglePdf(!included)}
+              className={`relative h-5 w-9 rounded-full transition-colors ${included ? "bg-gold" : "bg-silver"}`}
+            >
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${included ? "left-[18px]" : "left-0.5"}`} />
+            </button>
+          </label>
+        )}
+      </div>
       {note && <p className="text-xs text-dark/50">{note}</p>}
       <div className="mt-2">{children}</div>
     </div>
@@ -53,18 +89,26 @@ function ChartPanel({ title, note, wide, children }: { title: string; note?: str
 }
 
 function GroupedBars({
-  data, nameA, nameB, height = 260, suffix = "", angle = 0,
-}: { data: Pair[]; nameA: string; nameB: string; height?: number; suffix?: string; angle?: number }) {
+  data, people, height = 260, suffix = "", angle = 0,
+}: { data: Group[]; people: SelectedPerson[]; height?: number; suffix?: string; angle?: number }) {
+  // Compact (12.5M, 43K) on the axis and bar tops so large totals fit the
+  // 52px axis instead of being clipped to "000,000".
+  const short = (v: number) => (suffix ? `${fmtNum(v, 1)}${suffix}` : fmtCompact(v));
+  // Value labels on top of every bar get unreadable past ~3 people.
+  const showLabels = people.length <= 3;
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <BarChart data={data} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid stroke={COLOR_GRID} vertical={false} />
         <XAxis dataKey="name" tick={AXIS_TICK} interval={0} angle={angle} textAnchor={angle ? "end" : "middle"} height={angle ? 70 : 30} />
-        <YAxis tick={AXIS_TICK} width={52} tickFormatter={(v) => `${fmtNum(v, 0)}${suffix}`} />
+        <YAxis tick={AXIS_TICK} width={52} tickFormatter={short} />
         <Tooltip formatter={(v: number) => `${fmtNum(v, 2)}${suffix}`} />
         <Legend />
-        <Bar name={nameA} dataKey="a" fill={COLOR_PRIMARY} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-        <Bar name={nameB} dataKey="b" fill={COLOR_SECONDARY} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+        {people.map((p) => (
+          <Bar key={p.id} name={p.name} dataKey={p.id} fill={p.color} radius={[3, 3, 0, 0]} maxBarSize={BAR_MAX} isAnimationActive={false}>
+            {showLabels && <LabelList dataKey={p.id} position="top" formatter={short} style={VALUE_LABEL} />}
+          </Bar>
+        ))}
       </BarChart>
     </ResponsiveContainer>
   );
@@ -73,35 +117,53 @@ function GroupedBars({
 function IssueBars({ rows, color }: { rows: { name: string; value: number }[]; color: string }) {
   return (
     <ResponsiveContainer width="100%" height={Math.max(160, rows.length * 30 + 30)}>
-      <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 24, left: 0, bottom: 0 }}>
+      <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 44, left: 0, bottom: 0 }}>
         <CartesianGrid stroke={COLOR_GRID} horizontal={false} />
-        <XAxis type="number" tick={AXIS_TICK} />
+        <XAxis type="number" tick={AXIS_TICK} tickFormatter={fmtCompact} />
         <YAxis type="category" dataKey="name" tick={AXIS_TICK} width={130} interval={0} />
         <Tooltip formatter={(v: number) => `${fmtNum(v)} mentions`} />
-        <Bar name="Mentions" dataKey="value" fill={color} radius={[0, 3, 3, 0]} isAnimationActive={false} />
+        <Bar name="Mentions" dataKey="value" fill={color} radius={[0, 3, 3, 0]} maxBarSize={18} isAnimationActive={false}>
+          <LabelList dataKey="value" position="right" formatter={fmtCompact} style={VALUE_LABEL} />
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
 }
 
-/** Headline stat: both people's value side by side, leader marked with a trophy. */
-function StatCard({ label, a, b, nameA, nameB, lead }: { label: string; a: string; b: string; nameA: string; nameB: string; lead: "a" | "b" | null }) {
-  const cell = (color: string, name: string, value: string, isLead: boolean) => (
-    <div className="min-w-0 flex-1">
-      <div className="flex items-center gap-1 text-[11px] text-dark/50">
-        <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
-        <span className="truncate">{name}</span>
-        {isLead && <Trophy size={11} className="shrink-0 text-gold-600" />}
-      </div>
-      <div className={`text-lg font-semibold ${isLead ? "text-dark" : "text-dark/70"}`}>{value}</div>
-    </div>
-  );
+/** Headline stat: every person's value, the single leader marked with a trophy. */
+function StatCard({ label, people, raw }: { label: string; people: SelectedPerson[]; raw: (id: string) => number | null | undefined }) {
+  const values = people.map((p) => raw(p.id));
+  const nums = values.filter((v): v is number => typeof v === "number");
+  const best = nums.length === values.length && nums.length > 0 ? Math.max(...nums) : null;
+  // A trophy only for a sole, complete leader -- a tie or a missing value
+  // means no leader is declared (same rule as the Comparison page).
+  const leaderIdx = best !== null && nums.filter((v) => v === best).length === 1 ? values.indexOf(best) : -1;
   return (
     <div className="rounded-xl border border-silver/60 bg-white p-4 shadow-card">
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-navy-700/70">{label}</div>
-      <div className="flex gap-3">
-        {cell(COLOR_PRIMARY, nameA, a, lead === "a")}
-        {cell(COLOR_SECONDARY, nameB, b, lead === "b")}
+      <div className={people.length === 2 ? "flex gap-3" : "space-y-1"}>
+        {people.map((p, i) => {
+          const isLead = i === leaderIdx;
+          return people.length === 2 ? (
+            <div key={p.id} className="min-w-0 flex-1">
+              <div className="flex items-center gap-1 text-[11px] text-dark/50">
+                <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: p.color }} />
+                <span className="truncate">{p.name}</span>
+                {isLead && <Trophy size={11} className="shrink-0 text-gold-600" />}
+              </div>
+              <div className={`text-lg font-semibold ${isLead ? "text-dark" : "text-dark/70"}`}>{fmtNum(values[i])}</div>
+            </div>
+          ) : (
+            <div key={p.id} className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1 text-[11px] text-dark/60">
+                <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: p.color }} />
+                <span className="truncate">{p.name}</span>
+                {isLead && <Trophy size={11} className="shrink-0 text-gold-600" />}
+              </div>
+              <div className={`text-sm font-semibold ${isLead ? "text-dark" : "text-dark/70"}`}>{fmtNum(values[i])}</div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -141,66 +203,63 @@ function Section({ title, head, rows }: { title: string; head: string[]; rows: R
 }
 
 export default function Report() {
-  const { filters, personAName, personBName } = useFilters();
-  const ready = !!filters.personA && !!filters.personB;
+  const { filters, selected, ready } = useFilters();
+  const names = selected.map((p) => p.name);
 
-  const commonParams = {
-    person_a: filters.personA, person_b: filters.personB, platform: filters.platform,
-    content_type: filters.contentType, date_from: filters.dateFrom, date_to: filters.dateTo,
-  };
-  const deps = [filters.personA, filters.personB, filters.platform, filters.contentType, filters.dateFrom, filters.dateTo];
+  const commonParams = comparisonParams(filters);
+  const deps = comparisonDeps(filters);
 
   const overview = useApi<any>(() => api.get("/overview", commonParams), deps, ready);
   const engagement = useApi<any>(() => api.get("/engagement", commonParams), deps, ready);
   const sentiment = useApi<any>(() => api.get("/sentiment", commonParams), deps, ready);
   const narratives = useApi<any>(() => api.get("/narratives", commonParams), deps, ready);
   const comments = useApi<any>(
-    () => api.get("/comments", { person_a: filters.personA, person_b: filters.personB, platform: filters.platform }),
-    [filters.personA, filters.personB, filters.platform],
+    () => api.get("/comments", { person_ids: filters.personIds, platform: filters.platform }),
+    [filters.personIds.join(","), filters.platform],
     ready
   );
 
-  // Feeds the radar only -- a failure here shouldn't block the rest of the report.
-  const comparison = useApi<any>(
-    () => api.get("/comparison", { ...commonParams, period_days: filters.periodDays }),
-    [...deps, filters.periodDays],
-    ready
-  );
-
-  const loading = comparison.loading || overview.loading || engagement.loading || sentiment.loading || narratives.loading || comments.loading;
+  const loading = overview.loading || engagement.loading || sentiment.loading || narratives.loading || comments.loading;
   const error = overview.error || engagement.error || sentiment.error || narratives.error || comments.error;
-  const reloadAll = () => { overview.reload(); engagement.reload(); sentiment.reload(); narratives.reload(); comments.reload(); comparison.reload(); };
+  const reloadAll = () => { overview.reload(); engagement.reload(); sentiment.reload(); narratives.reload(); comments.reload(); };
+
+  /** One table row: label + one formatted value per selected person. */
+  const perPersonRow = (label: string, source: Record<string, any> | undefined, fmt: (b: any) => string): Row =>
+    [label, ...selected.map((p) => fmt(source?.[p.id] ?? {}))];
+
+  const kpi = overview.data?.kpis as Record<string, any> | undefined;
 
   const kpiRows: Row[] = useMemo(() => {
-    if (!overview.data) return [];
-    const a = overview.data.kpis.person_a, b = overview.data.kpis.person_b;
+    if (!kpi) return [];
     return [
-      ["Followers", fmtNum(a.followers), fmtNum(b.followers)],
-      ["Total Content", fmtNum(a.total_content), fmtNum(b.total_content)],
-      ["Posts", fmtNum(a.posts), fmtNum(b.posts)],
-      ["Reels", fmtNum(a.reels), fmtNum(b.reels)],
-      ["Total Likes", fmtNum(a.total_likes), fmtNum(b.total_likes)],
-      ["Avg Likes / Post", fmtNum(a.average_likes, 1), fmtNum(b.average_likes, 1)],
-      ["Total Comments", fmtNum(a.total_comments_count), fmtNum(b.total_comments_count)],
-      ["Avg Comments / Post", fmtNum(a.average_comments, 1), fmtNum(b.average_comments, 1)],
-      ["Total Engagement", fmtNum(a.total_engagement), fmtNum(b.total_engagement)],
-      ["Engagement Rate", fmtPct(a.engagement_rate), fmtPct(b.engagement_rate)],
-      ["View Engagement (post+reel)", fmtNum(a.view_engagement), fmtNum(b.view_engagement)],
+      perPersonRow("Followers", kpi, (k) => fmtNum(k.followers)),
+      perPersonRow("Total Content", kpi, (k) => fmtNum(k.total_content)),
+      perPersonRow("Posts", kpi, (k) => fmtNum(k.posts)),
+      perPersonRow("Reels", kpi, (k) => fmtNum(k.reels)),
+      perPersonRow("Total Likes", kpi, (k) => fmtNum(k.total_likes)),
+      perPersonRow("Avg Likes / Post", kpi, (k) => fmtNum(k.average_likes, 1)),
+      perPersonRow("Total Comments", kpi, (k) => fmtNum(k.total_comments_count)),
+      perPersonRow("Avg Comments / Post", kpi, (k) => fmtNum(k.average_comments, 1)),
+      perPersonRow("Total Engagement", kpi, (k) => fmtNum(k.total_engagement)),
+      perPersonRow("Engagement Rate", kpi, (k) => fmtPct(k.engagement_rate)),
+      perPersonRow("View Engagement (post+reel)", kpi, (k) => fmtNum(k.view_engagement)),
     ];
-  }, [overview.data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kpi, selected]);
 
   const engagementRows: Row[] = useMemo(() => {
-    if (!engagement.data) return [];
-    const a = engagement.data.person_a, b = engagement.data.person_b;
+    const e = engagement.data?.people;
+    if (!e) return [];
     return [
-      ["Average Engagement", fmtNum(a.average_engagement, 1), fmtNum(b.average_engagement, 1)],
-      ["Engagement Rate", fmtPct(a.engagement_rate_pct), fmtPct(b.engagement_rate_pct)],
-      ["Engagement / 1000 Followers", fmtNum(a.engagement_per_1000_followers, 2), fmtNum(b.engagement_per_1000_followers, 2)],
-      ["P90 Engagement", fmtNum(a.p90_engagement, 1), fmtNum(b.p90_engagement, 1)],
-      ["P95 Engagement", fmtNum(a.p95_engagement, 1), fmtNum(b.p95_engagement, 1)],
-      ["Top 10% Avg Engagement", fmtNum(a.top10_percent_avg_engagement, 1), fmtNum(b.top10_percent_avg_engagement, 1)],
+      perPersonRow("Average Engagement", e, (b) => fmtNum(b.average_engagement, 1)),
+      perPersonRow("Engagement Rate", e, (b) => fmtPct(b.engagement_rate_pct)),
+      perPersonRow("Engagement / 1000 Followers", e, (b) => fmtNum(b.engagement_per_1000_followers, 2)),
+      perPersonRow("P90 Engagement", e, (b) => fmtNum(b.p90_engagement, 1)),
+      perPersonRow("P95 Engagement", e, (b) => fmtNum(b.p95_engagement, 1)),
+      perPersonRow("Top 10% Avg Engagement", e, (b) => fmtNum(b.top10_percent_avg_engagement, 1)),
     ];
-  }, [engagement.data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engagement.data, selected]);
 
   const topContentRows = (items: any[]): Row[] =>
     (items ?? []).map((r, i) => [i + 1, r.person_name, r.platform, fmtDate(r.published_at), fmtNum(r.likes), fmtNum(r.comments_count), fmtNum(r.engagement, 1)]);
@@ -208,79 +267,70 @@ export default function Report() {
   const topPostsRows = useMemo(() => topContentRows(engagement.data?.top_posts), [engagement.data]);
   const topReelsRows = useMemo(() => topContentRows(engagement.data?.top_reels), [engagement.data]);
 
-  const postSentimentRows = useMemo(
-    () => mergeDist(sentiment.data?.post_sentiment?.person_a, sentiment.data?.post_sentiment?.person_b),
-    [sentiment.data]
-  );
-  const commentSentimentRows = useMemo(
-    () => mergeDist(sentiment.data?.comment_sentiment?.person_a, sentiment.data?.comment_sentiment?.person_b),
-    [sentiment.data]
-  );
+  // Sentiment covers only the comments we scraped (top-level, no replies), so it
+  // never adds up to the platform's comments_count -- show both totals side by side.
+  const sumDist = (d?: Record<string, number>) => Object.values(d ?? {}).reduce((s, n) => s + n, 0);
+  const sentimentDists: Dist[] = selected.map((p) => sentiment.data?.comment_sentiment?.[p.id]);
+  const analysed = sentimentDists.map(sumDist);
+  const commentSentimentRows = useMemo(() => {
+    const rows = mergeDist(sentimentDists);
+    if (!rows.length) return rows;
+    rows.push(["Total analysed comments", ...analysed.map((n) => fmtNum(n))]);
+    if (kpi) rows.push(perPersonRow("Platform-reported comments (incl. replies)", kpi, (k) => fmtNum(k.total_comments_count)));
+    return rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentiment.data, overview.data, selected]);
+  const commentSentimentNote = kpi && analysed.some(Boolean)
+    ? `Based on ${analysed.map((n) => fmtNum(n)).join(" vs ")} scraped top-level comments. The platforms report `
+      + `${selected.map((p) => fmtNum(kpi[p.id]?.total_comments_count)).join(" vs ")} `
+      + `(that count includes replies and comments not available to scrape).`
+    : undefined;
 
   const narrativeRows: Row[] = useMemo(() => {
     if (!narratives.data?.analysis_available) return [];
     return (narratives.data.table ?? []).map((r: any) => [
-      r.narrative, fmtNum(r.person_a_count), fmtPct(r.person_a_pct), fmtNum(r.person_b_count), fmtPct(r.person_b_pct),
+      r.narrative,
+      ...selected.flatMap((p) => [fmtNum(r.people?.[p.id]?.count), fmtPct(r.people?.[p.id]?.pct)]),
     ]);
-  }, [narratives.data]);
+  }, [narratives.data, selected]);
 
-  const themeRows = useMemo(
-    () => mergeDist(comments.data?.person_a?.theme_breakdown, comments.data?.person_b?.theme_breakdown),
-    [comments.data]
-  );
+  const themeDists: Dist[] = selected.map((p) => comments.data?.people?.[p.id]?.theme_breakdown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const themeRows = useMemo(() => mergeDist(themeDists), [comments.data, selected]);
   const issuesRows = (block: any): Row[] =>
     (block?.issues ?? []).slice(0, 10).map((r: any) => [r.issue, fmtNum(r.mentions), fmtPct(r.percentage)]);
-  const issuesARows = useMemo(() => issuesRows(comments.data?.person_a), [comments.data]);
-  const issuesBRows = useMemo(() => issuesRows(comments.data?.person_b), [comments.data]);
+  const issueBars = (block: any) => (block?.issues ?? []).slice(0, 10).map((r: any) => ({ name: r.issue, value: r.mentions ?? 0 }));
 
   const [downloading, setDownloading] = useState(false);
+  const [narrativeInPdf, setNarrativeInPdf] = useState(true);
   const chartsRef = useRef<HTMLDivElement>(null);
 
-  const kpi = overview.data?.kpis;
-  const lead = (a?: number | null, b?: number | null): "a" | "b" | null =>
-    typeof a === "number" && typeof b === "number" && a !== b ? (a > b ? "a" : "b") : null;
-
-  const radarData = useMemo(
-    () => Object.entries(comparison.data?.normalized_analytics_index?.dimensions ?? {}).map(([dimension, v]: [string, any]) => ({
-      dimension, a: v.person_a ?? 0, b: v.person_b ?? 0,
-    })),
-    [comparison.data]
+  const kpiGroups = (metrics: [string, string][]): Group[] => kpi
+    ? metrics.map(([name, key]) => ({
+      name,
+      ...Object.fromEntries(selected.map((p) => [p.id, kpi[p.id]?.[key] ?? 0])),
+    }) as Group)
+    : [];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const mixGroups = useMemo(() => kpiGroups([["Posts", "posts"], ["Reels", "reels"]]), [kpi, selected]);
+  const totalsGroups = useMemo(
+    () => kpiGroups([["Likes", "total_likes"], ["Comments", "total_comments_count"], ["Engagement", "total_engagement"]]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kpi, selected]
   );
-  const mixPairs: Pair[] = useMemo(() => kpi ? [
-    { name: "Posts", a: kpi.person_a.posts ?? 0, b: kpi.person_b.posts ?? 0 },
-    { name: "Reels", a: kpi.person_a.reels ?? 0, b: kpi.person_b.reels ?? 0 },
-  ] : [], [kpi]);
-  const totalsPairs: Pair[] = useMemo(() => kpi ? [
-    { name: "Likes", a: kpi.person_a.total_likes ?? 0, b: kpi.person_b.total_likes ?? 0 },
-    { name: "Comments", a: kpi.person_a.total_comments_count ?? 0, b: kpi.person_b.total_comments_count ?? 0 },
-    { name: "Engagement", a: kpi.person_a.total_engagement ?? 0, b: kpi.person_b.total_engagement ?? 0 },
-  ] : [], [kpi]);
-  const avgPairs: Pair[] = useMemo(() => kpi ? [
-    { name: "Avg Likes", a: kpi.person_a.average_likes ?? 0, b: kpi.person_b.average_likes ?? 0 },
-    { name: "Avg Comments", a: kpi.person_a.average_comments ?? 0, b: kpi.person_b.average_comments ?? 0 },
-  ] : [], [kpi]);
-  const engPairs: Pair[] = useMemo(() => {
-    const a = engagement.data?.person_a, b = engagement.data?.person_b;
-    if (!a || !b) return [];
-    return [
-      { name: "Average", a: a.average_engagement ?? 0, b: b.average_engagement ?? 0 },
-      { name: "P90", a: a.p90_engagement ?? 0, b: b.p90_engagement ?? 0 },
-      { name: "P95", a: a.p95_engagement ?? 0, b: b.p95_engagement ?? 0 },
-      { name: "Top 10% avg", a: a.top10_percent_avg_engagement ?? 0, b: b.top10_percent_avg_engagement ?? 0 },
-    ];
-  }, [engagement.data]);
-  const postSentPairs = useMemo(() => distPairs(sentiment.data?.post_sentiment?.person_a, sentiment.data?.post_sentiment?.person_b), [sentiment.data]);
-  const commentSentPairs = useMemo(() => distPairs(sentiment.data?.comment_sentiment?.person_a, sentiment.data?.comment_sentiment?.person_b), [sentiment.data]);
-  const narrativePairs: Pair[] = useMemo(
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const commentSentGroups = useMemo(() => distGroups(selected, sentimentDists), [sentiment.data, selected]);
+  const narrativeGroups: Group[] = useMemo(
     () => narratives.data?.analysis_available
-      ? (narratives.data.table ?? []).map((r: any) => ({ name: r.narrative, a: r.person_a_pct ?? 0, b: r.person_b_pct ?? 0 }))
+      ? (narratives.data.table ?? []).map((r: any) => ({
+        name: r.narrative,
+        ...Object.fromEntries(selected.map((p) => [p.id, r.people?.[p.id]?.pct ?? 0])),
+      }) as Group)
       : [],
-    [narratives.data]
+    [narratives.data, selected]
   );
-  const themePairs = useMemo(() => distPairs(comments.data?.person_a?.theme_breakdown, comments.data?.person_b?.theme_breakdown), [comments.data]);
-  const issueBars = (block: any) => (block?.issues ?? []).slice(0, 10).map((r: any) => ({ name: r.issue, value: r.mentions ?? 0 }));
-  const issuesABars = useMemo(() => issueBars(comments.data?.person_a), [comments.data]);
-  const issuesBBars = useMemo(() => issueBars(comments.data?.person_b), [comments.data]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const themeGroups = useMemo(() => distGroups(selected, themeDists), [comments.data, selected]);
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -295,6 +345,7 @@ export default function Report() {
     const doc = new jsPDF({ unit: "pt", format: "a4" });
     const marginX = 40;
     const pageHeight = doc.internal.pageSize.getHeight();
+    const pageWidth = doc.internal.pageSize.getWidth();
     let y = 50;
 
     doc.setFontSize(18);
@@ -302,8 +353,9 @@ export default function Report() {
     y += 20;
     doc.setFontSize(10);
     doc.setTextColor(90);
-    doc.text(`${personAName}  vs  ${personBName}`, marginX, y);
-    y += 14;
+    const titleLines = doc.splitTextToSize(names.join("  vs  "), pageWidth - marginX * 2) as string[];
+    doc.text(titleLines, marginX, y);
+    y += 14 * titleLines.length;
     doc.text(
       `Platform: ${filters.platform}   |   Content: ${filters.contentType}   |   Window: ${filters.dateFrom ?? "all time"} - ${filters.dateTo ?? "now"}`,
       marginX, y
@@ -315,10 +367,10 @@ export default function Report() {
 
     // Visual comparison: every chart currently on screen, two per row
     // (full-width ones get their own row), ahead of the data tables.
-    const usableW = doc.internal.pageSize.getWidth() - marginX * 2;
+    const usableW = pageWidth - marginX * 2;
     const gap = 14;
     const halfW = (usableW - gap) / 2;
-    const nodes = Array.from(chartsRef.current?.querySelectorAll<HTMLElement>("[data-pdf-chart]") ?? []);
+    const nodes = Array.from(chartsRef.current?.querySelectorAll<HTMLElement>('[data-pdf-chart][data-pdf-include="1"]') ?? []);
     const captured = await Promise.all(nodes.map(async (n) => {
       const svg = n.querySelector<SVGSVGElement>("svg.recharts-surface");
       if (!svg) return null;
@@ -334,15 +386,18 @@ export default function Report() {
       doc.setFontSize(13);
       doc.text("Visual Comparison", marginX, y);
       y += 16;
-      // The on-screen legends are HTML (not in the SVG), so draw one shared key.
+      // The on-screen legends are HTML (not in the SVG), so draw one shared
+      // key -- one color swatch per person, wrapping onto a new line as needed.
       doc.setFontSize(9);
-      doc.setFillColor(22, 48, 90);
-      doc.rect(marginX, y - 7, 8, 8, "F");
-      doc.text(personAName, marginX + 12, y);
-      const bx = marginX + 12 + doc.getTextWidth(personAName) + 18;
-      doc.setFillColor(245, 166, 35);
-      doc.rect(bx, y - 7, 8, 8, "F");
-      doc.text(personBName, bx + 12, y);
+      let lx = marginX;
+      selected.forEach((p) => {
+        const w = 12 + doc.getTextWidth(p.name) + 18;
+        if (lx + w > pageWidth - marginX) { lx = marginX; y += 14; }
+        doc.setFillColor(...hexToRgb(p.color));
+        doc.rect(lx, y - 7, 8, 8, "F");
+        doc.text(p.name, lx + 12, y);
+        lx += w;
+      });
       y += 14;
 
       const heightAt = (c: (typeof charts)[number], w: number) => (c.img.height / c.img.width) * w + 30;
@@ -376,28 +431,30 @@ export default function Report() {
         head: [head],
         body: body as (string | number)[][],
         margin: { left: marginX, right: marginX },
-        styles: { fontSize: 8.5, cellPadding: 4 },
+        styles: { fontSize: selected.length > 3 ? 7.5 : 8.5, cellPadding: 4 },
         headStyles: { fillColor: [15, 40, 80] },
         theme: "striped",
       });
       y = (doc as any).lastAutoTable.finalY + 26;
     };
 
-    section("Overview KPIs", ["Metric", personAName, personBName], kpiRows);
-    section("Engagement Summary", ["Metric", personAName, personBName], engagementRows);
+    section("Overview KPIs", ["Metric", ...names], kpiRows);
+    section("Engagement Summary", ["Metric", ...names], engagementRows);
     section("Top Posts (by engagement)", ["#", "Person", "Platform", "Date", "Likes", "Comments", "Engagement"], topPostsRows);
     section("Top Reels (by engagement)", ["#", "Person", "Platform", "Date", "Likes", "Comments", "Engagement"], topReelsRows);
-    section("Post Sentiment", ["Sentiment", personAName, personBName], postSentimentRows);
-    section("Comment Sentiment", ["Sentiment", personAName, personBName], commentSentimentRows);
-    section("Narrative Breakdown", ["Narrative", `${personAName} Count`, `${personAName} %`, `${personBName} Count`, `${personBName} %`], narrativeRows);
-    section("Comment Theme Breakdown", ["Theme", personAName, personBName], themeRows);
-    section(`Top Public Issues -- ${personAName}`, ["Issue", "Mentions", "% of Comments"], issuesARows);
-    section(`Top Public Issues -- ${personBName}`, ["Issue", "Mentions", "% of Comments"], issuesBRows);
+    section("Comment Sentiment", ["Sentiment", ...names], commentSentimentRows);
+    section("Narrative Breakdown", narrativeHead, narrativeRows);
+    section("Comment Theme Breakdown", ["Theme", ...names], themeRows);
+    selected.forEach((p) => {
+      section(`Top Public Issues -- ${p.name}`, ["Issue", "Mentions", "% of Comments"], issuesRows(comments.data?.people?.[p.id]));
+    });
 
     const stamp = new Date().toISOString().slice(0, 10);
     const safe = (s: string) => s.replace(/[^a-z0-9]+/gi, "_");
-    doc.save(`report_${safe(personAName)}_vs_${safe(personBName)}_${stamp}.pdf`);
+    doc.save(`report_${names.map(safe).join("_vs_")}_${stamp}.pdf`);
   };
+
+  const narrativeHead = ["Narrative", ...names.flatMap((n) => [`${n} Count`, `${n} %`])];
 
   if (!ready) return <SelectPeoplePrompt />;
 
@@ -406,7 +463,7 @@ export default function Report() {
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-silver/60 bg-white p-4 shadow-card">
           <div>
-            <h1 className="text-lg font-semibold text-dark">Overall Report -- {personAName} vs {personBName}</h1>
+            <h1 className="text-lg font-semibold text-dark">Overall Report -- {names.join(" vs ")}</h1>
             <p className="text-xs text-dark/50">
               Platform: {filters.platform} · Content: {filters.contentType} · Window: {filters.dateFrom ?? "all time"} - {filters.dateTo ?? "now"}
             </p>
@@ -422,99 +479,64 @@ export default function Report() {
         </div>
 
         {kpi && (
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard label="Followers" nameA={personAName} nameB={personBName}
-              a={fmtNum(kpi.person_a.followers)} b={fmtNum(kpi.person_b.followers)} lead={lead(kpi.person_a.followers, kpi.person_b.followers)} />
-            <StatCard label="Total Content" nameA={personAName} nameB={personBName}
-              a={fmtNum(kpi.person_a.total_content)} b={fmtNum(kpi.person_b.total_content)} lead={lead(kpi.person_a.total_content, kpi.person_b.total_content)} />
-            <StatCard label="Engagement Rate" nameA={personAName} nameB={personBName}
-              a={fmtPct(kpi.person_a.engagement_rate)} b={fmtPct(kpi.person_b.engagement_rate)} lead={lead(kpi.person_a.engagement_rate, kpi.person_b.engagement_rate)} />
-            <StatCard label="Total Engagement" nameA={personAName} nameB={personBName}
-              a={fmtNum(kpi.person_a.total_engagement)} b={fmtNum(kpi.person_b.total_engagement)} lead={lead(kpi.person_a.total_engagement, kpi.person_b.total_engagement)} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <StatCard label="Followers" people={selected} raw={(id) => kpi[id]?.followers} />
+            <StatCard label="Total Content" people={selected} raw={(id) => kpi[id]?.total_content} />
+            <StatCard label="Total Engagement" people={selected} raw={(id) => kpi[id]?.total_engagement} />
           </div>
         )}
 
         <SectionHeading>Visual comparison</SectionHeading>
         <div ref={chartsRef} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {radarData.length > 0 && (
-            <ChartPanel title="Overall Comparison (Normalized Index)" note={comparison.data?.normalized_analytics_index?.note} wide>
-              <ResponsiveContainer width="100%" height={340}>
-                <RadarChart data={radarData} outerRadius={120}>
-                  <PolarGrid stroke={COLOR_GRID} />
-                  <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 11, fill: "#5B6478" }} />
-                  <PolarRadiusAxis tick={{ fontSize: 9, fill: "#8B93A7" }} axisLine={false} />
-                  <Tooltip formatter={(v: number) => fmtNum(v, 1)} />
-                  <Legend />
-                  <Radar name={personAName} dataKey="a" stroke={COLOR_PRIMARY} fill={COLOR_PRIMARY} fillOpacity={0.25} isAnimationActive={false} />
-                  <Radar name={personBName} dataKey="b" stroke={COLOR_SECONDARY} fill={COLOR_SECONDARY} fillOpacity={0.35} isAnimationActive={false} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </ChartPanel>
-          )}
-          {mixPairs.length > 0 && (
+          {mixGroups.length > 0 && (
             <ChartPanel title="Content Mix (Posts vs Reels)">
-              <GroupedBars data={mixPairs} nameA={personAName} nameB={personBName} />
+              <GroupedBars data={mixGroups} people={selected} />
             </ChartPanel>
           )}
-          {totalsPairs.length > 0 && (
-            <ChartPanel title="Total Likes, Comments & Engagement">
-              <GroupedBars data={totalsPairs} nameA={personAName} nameB={personBName} />
+          {/* One chart per total -- on a shared axis, comments (thousands) were
+              invisible next to likes/engagement (millions). */}
+          {totalsGroups.map((g) => (
+            <ChartPanel key={g.name} title={`Total ${g.name}`}>
+              <GroupedBars data={[g]} people={selected} />
+            </ChartPanel>
+          ))}
+          {commentSentGroups.length > 0 && (
+            <ChartPanel title="Comment Sentiment" note={commentSentimentNote}>
+              <GroupedBars data={commentSentGroups} people={selected} />
             </ChartPanel>
           )}
-          {avgPairs.length > 0 && (
-            <ChartPanel title="Average Likes & Comments per Post">
-              <GroupedBars data={avgPairs} nameA={personAName} nameB={personBName} />
+          {narrativeGroups.length > 0 && (
+            <ChartPanel title="Narrative Share (% of content)" wide inPdf={narrativeInPdf} onTogglePdf={setNarrativeInPdf}>
+              <GroupedBars data={narrativeGroups} people={selected} suffix="%" angle={-25} height={300} />
             </ChartPanel>
           )}
-          {engPairs.length > 0 && (
-            <ChartPanel title="Engagement Distribution">
-              <GroupedBars data={engPairs} nameA={personAName} nameB={personBName} />
-            </ChartPanel>
-          )}
-          {postSentPairs.length > 0 && (
-            <ChartPanel title="Post Sentiment">
-              <GroupedBars data={postSentPairs} nameA={personAName} nameB={personBName} />
-            </ChartPanel>
-          )}
-          {commentSentPairs.length > 0 && (
-            <ChartPanel title="Comment Sentiment">
-              <GroupedBars data={commentSentPairs} nameA={personAName} nameB={personBName} />
-            </ChartPanel>
-          )}
-          {narrativePairs.length > 0 && (
-            <ChartPanel title="Narrative Share (% of content)" wide>
-              <GroupedBars data={narrativePairs} nameA={personAName} nameB={personBName} suffix="%" angle={-25} height={300} />
-            </ChartPanel>
-          )}
-          {themePairs.length > 0 && (
+          {themeGroups.length > 0 && (
             <ChartPanel title="Comment Themes" wide>
-              <GroupedBars data={themePairs} nameA={personAName} nameB={personBName} angle={-25} height={300} />
+              <GroupedBars data={themeGroups} people={selected} angle={-25} height={300} />
             </ChartPanel>
           )}
-          {issuesABars.length > 0 && (
-            <ChartPanel title={`Top Public Issues -- ${personAName}`}>
-              <IssueBars rows={issuesABars} color={COLOR_PRIMARY} />
-            </ChartPanel>
-          )}
-          {issuesBBars.length > 0 && (
-            <ChartPanel title={`Top Public Issues -- ${personBName}`}>
-              <IssueBars rows={issuesBBars} color={COLOR_SECONDARY} />
-            </ChartPanel>
-          )}
+          {selected.map((p) => {
+            const bars = issueBars(comments.data?.people?.[p.id]);
+            return bars.length > 0 ? (
+              <ChartPanel key={p.id} title={`Top Public Issues -- ${p.name}`}>
+                <IssueBars rows={bars} color={p.color} />
+              </ChartPanel>
+            ) : null;
+          })}
         </div>
 
         <SectionHeading>Detailed data</SectionHeading>
 
-        <Section title="Overview KPIs" head={["Metric", personAName, personBName]} rows={kpiRows} />
-        <Section title="Engagement Summary" head={["Metric", personAName, personBName]} rows={engagementRows} />
+        <Section title="Overview KPIs" head={["Metric", ...names]} rows={kpiRows} />
+        <Section title="Engagement Summary" head={["Metric", ...names]} rows={engagementRows} />
         <Section title="Top Posts (by engagement)" head={["#", "Person", "Platform", "Date", "Likes", "Comments", "Engagement"]} rows={topPostsRows} />
         <Section title="Top Reels (by engagement)" head={["#", "Person", "Platform", "Date", "Likes", "Comments", "Engagement"]} rows={topReelsRows} />
-        <Section title="Post Sentiment" head={["Sentiment", personAName, personBName]} rows={postSentimentRows} />
-        <Section title="Comment Sentiment" head={["Sentiment", personAName, personBName]} rows={commentSentimentRows} />
-        <Section title="Narrative Breakdown" head={["Narrative", `${personAName} Count`, `${personAName} %`, `${personBName} Count`, `${personBName} %`]} rows={narrativeRows} />
-        <Section title="Comment Theme Breakdown" head={["Theme", personAName, personBName]} rows={themeRows} />
-        <Section title={`Top Public Issues -- ${personAName}`} head={["Issue", "Mentions", "% of Comments"]} rows={issuesARows} />
-        <Section title={`Top Public Issues -- ${personBName}`} head={["Issue", "Mentions", "% of Comments"]} rows={issuesBRows} />
+        <Section title="Comment Sentiment" head={["Sentiment", ...names]} rows={commentSentimentRows} />
+        <Section title="Narrative Breakdown" head={narrativeHead} rows={narrativeRows} />
+        <Section title="Comment Theme Breakdown" head={["Theme", ...names]} rows={themeRows} />
+        {selected.map((p) => (
+          <Section key={p.id} title={`Top Public Issues -- ${p.name}`} head={["Issue", "Mentions", "% of Comments"]} rows={issuesRows(comments.data?.people?.[p.id])} />
+        ))}
       </div>
     </AsyncBoundary>
   );

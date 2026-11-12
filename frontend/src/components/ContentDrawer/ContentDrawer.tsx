@@ -74,7 +74,6 @@ export function ContentDrawer({ contentId, onClose }: { contentId: string | null
               <div className="mb-1 text-xs font-semibold uppercase text-dark/50 dark:text-silver/50">Model-Classified (AI)</div>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <Field label="Narrative" value={c.narrative ?? "Not analyzed"} />
-                <Field label="Sentiment" value={c.sentiment ?? "Not analyzed"} />
               </div>
               {c.narrative && (
                 <div className="mt-1 text-[11px] text-dark/40 dark:text-silver/40">

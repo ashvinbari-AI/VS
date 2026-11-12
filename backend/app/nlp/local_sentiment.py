@@ -11,9 +11,10 @@ two env vars (see .env.example):
                              (narrative.py) is Marathi-only, not Hindi, so
                              Devanagari here is treated as Marathi.
 
-SENTIMENT ONLY -- narrative / comment-theme / issue-extraction have no
-local-transformer tier and stay on the keyword lexicon unless Gemini is
-enabled. Both env vars unset (the default) makes this module a no-op:
+COMMENT SENTIMENT ONLY -- the only sentiment this app classifies (post-level
+sentiment was removed entirely). Narrative / comment-theme / issue-extraction
+have no local-transformer tier and always stay on the keyword lexicon,
+Gemini or not. Both env vars unset (the default) makes this module a no-op:
 sentiment.py keeps using the lexicon exactly as before.
 
 Needs `pip install transformers torch` -- see requirements.txt. Same
@@ -66,6 +67,10 @@ def _get_pipeline(model_name: str):
         logger = get_logger("analysis", get_settings().logs_dir)
         logger.warning("Could not load the 'transformers' package/torch (%s: %s) -- "
                         "falling back to the lexicon for local sentiment", type(e).__name__, e)
+        # Remember the failure. Without this, every comment retried the
+        # import (~3s each on a broken torch install), turning a few thousand
+        # new comments into hours of analysis that all fell back anyway.
+        _pipeline_cache[model_name] = None
         return None
     try:
         pipe = pipeline("sentiment-analysis", model=model_name, top_k=None)

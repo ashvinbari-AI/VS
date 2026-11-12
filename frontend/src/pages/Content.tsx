@@ -5,28 +5,27 @@ import { SelectPeoplePrompt } from "../components/EmptyState/SelectPeoplePrompt"
 import { DataTable } from "../components/Tables/DataTable";
 import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
-import { useFilters } from "../state/FilterContext";
+import { useFilters, type SelectedPerson } from "../state/FilterContext";
 import { fmtDate, fmtNum } from "../utils/format";
 import type { ContentItem } from "../types/api";
 
 export default function Content() {
-  const { filters, personAName, personBName } = useFilters();
-  const ready = !!filters.personA && !!filters.personB;
+  const { filters, selected: people, ready } = useFilters();
   const [selected, setSelected] = useState<string | null>(null);
 
   const { data, loading, error, reload } = useApi<{ items: ContentItem[] }>(
     () => api.get("/content", {
-      person_ids: [filters.personA, filters.personB], platform: filters.platform,
+      person_ids: filters.personIds, platform: filters.platform,
       content_type: filters.contentType, date_from: filters.dateFrom, date_to: filters.dateTo,
       sort_by: "engagement", sort_dir: "desc", page_size: 50,
     }),
-    [filters.personA, filters.personB, filters.platform, filters.contentType, filters.dateFrom],
+    [filters.personIds.join(","), filters.platform, filters.contentType, filters.dateFrom],
     ready
   );
 
   if (!ready) return <SelectPeoplePrompt />;
 
-  const distribution = distributionByType(data?.items ?? [], filters.personA, filters.personB);
+  const distribution = distributionByType(data?.items ?? [], people);
 
   return (
     <AsyncBoundary loading={loading} error={error} onRetry={reload}>
@@ -36,15 +35,24 @@ export default function Content() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase text-dark/50">
-                <th className="py-1">Type</th><th className="py-1 text-right">{personAName} %</th><th className="py-1 text-right">{personBName} %</th>
+                <th className="py-1">Type</th>
+                {people.map((p) => (
+                  <th key={p.id} className="py-1 text-right">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color }} />
+                      {p.name} %
+                    </span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {distribution.map((row) => (
                 <tr key={row.type} className="border-t border-silver/30">
                   <td className="py-1.5 capitalize">{row.type}</td>
-                  <td className="py-1.5 text-right">{row.aPct}%</td>
-                  <td className="py-1.5 text-right">{row.bPct}%</td>
+                  {people.map((p) => (
+                    <td key={p.id} className="py-1.5 text-right">{row.pct[p.id]}%</td>
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -68,7 +76,6 @@ export default function Content() {
               { key: "comments", header: "Comments", render: (r) => fmtNum(r.comments_count), align: "right", sortable: true, sortValue: (r) => r.comments_count },
               { key: "engagement", header: "Engagement", render: (r) => fmtNum(r.engagement), align: "right", sortable: true, sortValue: (r) => r.engagement },
               { key: "narrative", header: "Narrative", render: (r) => r.narrative ?? "—", sortable: true, sortValue: (r) => r.narrative },
-              { key: "sentiment", header: "Sentiment", render: (r) => r.sentiment ?? "—", sortable: true, sortValue: (r) => r.sentiment },
             ]}
           />
         </div>
@@ -78,13 +85,14 @@ export default function Content() {
   );
 }
 
-function distributionByType(items: ContentItem[], personA: string, personB: string) {
+function distributionByType(items: ContentItem[], people: SelectedPerson[]) {
   const types = ["post", "reel", "video", "photo"];
-  const aItems = items.filter((i) => i.person_id === personA);
-  const bItems = items.filter((i) => i.person_id === personB);
+  const byPerson = Object.fromEntries(people.map((p) => [p.id, items.filter((i) => i.person_id === p.id)]));
   return types.map((type) => ({
     type,
-    aPct: aItems.length ? Math.round((aItems.filter((i) => i.content_type === type).length / aItems.length) * 100) : 0,
-    bPct: bItems.length ? Math.round((bItems.filter((i) => i.content_type === type).length / bItems.length) * 100) : 0,
+    pct: Object.fromEntries(people.map((p) => {
+      const own = byPerson[p.id];
+      return [p.id, own.length ? Math.round((own.filter((i) => i.content_type === type).length / own.length) * 100) : 0];
+    })) as Record<string, number>,
   }));
 }

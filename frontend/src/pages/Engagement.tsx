@@ -3,9 +3,8 @@ import { AsyncBoundary } from "../components/Loading/AsyncBoundary";
 import { SelectPeoplePrompt } from "../components/EmptyState/SelectPeoplePrompt";
 import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
-import { useFilters } from "../state/FilterContext";
+import { comparisonDeps, comparisonParams, useFilters } from "../state/FilterContext";
 import { fmtDate, fmtNum } from "../utils/format";
-import { COLOR_PRIMARY, COLOR_SECONDARY } from "../utils/theme";
 
 interface TopContentItem {
   content_id: string;
@@ -21,21 +20,14 @@ interface TopContentItem {
 }
 
 export default function Engagement() {
-  const { filters, personAName, personBName } = useFilters();
-  const ready = !!filters.personA && !!filters.personB;
+  const { filters, ready, nameFor, colorFor } = useFilters();
   const { data, loading, error, reload } = useApi<any>(
-    () => api.get("/engagement", {
-      person_a: filters.personA, person_b: filters.personB, platform: filters.platform,
-      content_type: filters.contentType, date_from: filters.dateFrom, date_to: filters.dateTo,
-    }),
-    [filters.personA, filters.personB, filters.platform, filters.contentType, filters.dateFrom],
+    () => api.get("/engagement", comparisonParams(filters)),
+    comparisonDeps(filters),
     ready
   );
 
   if (!ready) return <SelectPeoplePrompt />;
-
-  const nameFor = (personId: string) => (personId === filters.personA ? personAName : personBName);
-  const colorFor = (personId: string) => (personId === filters.personA ? COLOR_PRIMARY : COLOR_SECONDARY);
 
   return (
     <AsyncBoundary loading={loading} error={error} onRetry={reload}>

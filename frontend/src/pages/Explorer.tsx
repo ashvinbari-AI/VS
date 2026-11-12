@@ -18,7 +18,7 @@ export default function Explorer() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
 
-  const personIds = [filters.personA, filters.personB].filter(Boolean);
+  const personIds = filters.personIds;
 
   const { data, loading, error, reload } = useApi<{ items: ContentItem[]; total: number; total_pages: number }>(
     () => api.get("/content", {
@@ -78,7 +78,6 @@ export default function Explorer() {
             { key: "comments", header: "Comments", render: (r) => fmtNum(r.comments_count), align: "right", sortable: true, sortValue: (r) => r.comments_count },
             { key: "engagement", header: "Engagement", render: (r) => fmtNum(r.engagement), align: "right", sortable: true, sortValue: (r) => r.engagement },
             { key: "narrative", header: "Narrative", render: (r) => r.narrative ?? "—", sortable: true, sortValue: (r) => r.narrative },
-            { key: "sentiment", header: "Sentiment", render: (r) => r.sentiment ?? "—", sortable: true, sortValue: (r) => r.sentiment },
           ]}
         />
         {data && data.total_pages > 1 && (

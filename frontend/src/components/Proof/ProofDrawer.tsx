@@ -1,16 +1,17 @@
 import { ExternalLink, X } from "lucide-react";
+import { useState } from "react";
 import { useApi } from "../../hooks/useApi";
 import { api } from "../../services/api";
 import { fmtDate, fmtNum, fmtPct } from "../../utils/format";
 import { DataTable, type Column } from "../Tables/DataTable";
+import { ContentDrawer } from "../ContentDrawer/ContentDrawer";
+import type { SelectedPerson } from "../../state/FilterContext";
 
 export interface ProofRequest {
   metric: string;
   label: string;
-  personAId: string;
-  personAName: string;
-  personBId: string;
-  personBName: string;
+  /** Every person whose evidence to show, side by side. */
+  people: SelectedPerson[];
   platform?: string;
   contentType?: string;
   dateFrom?: string;
@@ -38,11 +39,18 @@ interface ProofResponse {
 const GAP_METRICS = new Set(["longest_inactive_period_days", "median_interval_hours"]);
 const DISTRIBUTION_METRICS = new Set(["most_active_day", "most_active_hour"]);
 
-/** One click, both people. Both sides fetch and render independently (a
- * slow/failed fetch on one side never blocks the other) -- the evidence
+/** One click, every selected person. Each panel fetches and render independently (a
+ * slow/failed fetch for one person never blocks the others) -- the evidence
  * trail behind a KPI number, calling the exact same app.analytics.engine
  * function the card itself was built from (backend/app/routers/proof.py). */
 export function ProofDrawer({ request, onClose }: { request: ProofRequest | null; onClose: () => void }) {
+  // Which post's real comments are open, on top of this drawer -- the
+  // evidence table only ever shows counts (comments_count), so reading the
+  // actual comment text means drilling one level further into the same
+  // ContentDrawer the Content page uses. Shared across both people's panels
+  // since only one can be open at a time.
+  const [openContentId, setOpenContentId] = useState<string | null>(null);
+
   if (!request) return null;
 
   return (
@@ -51,23 +59,30 @@ export function ProofDrawer({ request, onClose }: { request: ProofRequest | null
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-silver/60 bg-white px-5 py-3 dark:border-navy-700 dark:bg-navy-900">
           <div>
             <h2 className="text-sm font-semibold text-dark dark:text-white">{request.label} — Calculation Evidence</h2>
-            <div className="text-xs text-dark/50 dark:text-silver/50">{request.personAName} vs {request.personBName}</div>
+            <div className="text-xs text-dark/50 dark:text-silver/50">{request.people.map((p) => p.name).join(" vs ")}</div>
           </div>
           <button onClick={onClose} className="rounded p-1 hover:bg-silver/20 dark:hover:bg-navy-700"><X size={18} /></button>
         </div>
 
         <div className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-2">
-          <PersonProof request={request} personId={request.personAId} personName={request.personAName} side="a" />
-          <PersonProof request={request} personId={request.personBId} personName={request.personBName} side="b" />
+          {request.people.map((p) => (
+            <PersonProof key={p.id} request={request} personId={p.id} personName={p.name} color={p.color} onOpenContent={setOpenContentId} />
+          ))}
         </div>
+      </div>
+      {/* Own click-catcher so a click inside it doesn't also close the
+          ProofDrawer underneath -- ContentDrawer already stopPropagation()s
+          on its own panel, this just covers its backdrop. */}
+      <div onClick={(e) => e.stopPropagation()}>
+        <ContentDrawer contentId={openContentId} onClose={() => setOpenContentId(null)} />
       </div>
     </div>
   );
 }
 
 function PersonProof({
-  request, personId, personName, side,
-}: { request: ProofRequest; personId: string; personName: string; side: "a" | "b" }) {
+  request, personId, personName, color, onOpenContent,
+}: { request: ProofRequest; personId: string; personName: string; color: string; onOpenContent: (contentId: string) => void }) {
   const { data, loading, error } = useApi<ProofResponse>(
     () =>
       api.get("/proof", {
@@ -79,19 +94,9 @@ function PersonProof({
     !!personId
   );
 
-  const accent = side === "a"
-    ? "border-navy-100 bg-navy-50/30 dark:border-navy-700 dark:bg-navy-800/40"
-    : "border-gold/30 bg-gold/5 dark:border-gold/20 dark:bg-gold/5";
-  const nameColor = side === "a" ? "text-navy dark:text-white" : "text-gold-700 dark:text-gold-300";
-
-  if (!personId) {
-    return (
-      <div className={`rounded-xl border p-4 ${accent}`}>
-        <div className={`text-sm font-semibold ${nameColor}`}>{side === "a" ? "Person A" : "Person B"}</div>
-        <div className="mt-2 text-xs text-dark/40 dark:text-silver/40">Not selected.</div>
-      </div>
-    );
-  }
+  // Each panel is tinted with that person's slot color (border + a faint
+  // wash) so it's obvious which evidence belongs to whom.
+  const accentStyle = { borderColor: `${color}55`, backgroundColor: `${color}0D` };
 
   const isFollowers = request.metric === "followers";
   const isGap = GAP_METRICS.has(request.metric);
@@ -106,10 +111,14 @@ function PersonProof({
         : (r: any) => r.content_id;
   const recordsLabel = isFollowers ? "Snapshot" : isGap ? "Gaps Between Posts" : isDistribution ? "Full Distribution" : "Contributing Posts";
   const emptyLabel = isFollowers ? "profile snapshot" : isGap ? "gaps" : isDistribution ? "activity" : "posts";
+  // Only this default (non-followers/gap/distribution) row shape actually
+  // has a content_id -- that's the only case a click can open a real post's
+  // real comments in the ContentDrawer.
+  const isContentRows = !isFollowers && !isGap && !isDistribution;
 
   return (
-    <div className={`rounded-xl border p-4 ${accent}`}>
-      <div className={`mb-3 text-sm font-semibold ${nameColor}`}>{personName}</div>
+    <div className="rounded-xl border p-4" style={accentStyle}>
+      <div className="mb-3 text-sm font-semibold" style={{ color }}>{personName}</div>
 
       {loading && <div className="text-sm text-dark/50 dark:text-silver/50">Loading...</div>}
       {error && <div className="text-sm text-red-600 dark:text-red-400">{error}</div>}
@@ -138,10 +147,14 @@ function PersonProof({
           <div>
             <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-dark/40 dark:text-silver/40">
               {recordsLabel} {!isFollowers && !isDistribution && `(${data.records.length})`}
+              {isContentRows && data.records.length > 0 && (
+                <span className="ml-2 normal-case font-normal text-dark/40 dark:text-silver/40">— click a post to read its real comments</span>
+              )}
             </div>
             {data.records.length > 0 ? (
               <DataTable
                 columns={columns} rows={data.records} keyFn={keyFn}
+                onRowClick={isContentRows ? (r) => onOpenContent(r.content_id) : undefined}
                 defaultSortKey={sortHighlightKey(request.metric)}
                 minWidthClass={isDistribution ? "min-w-[220px]" : isGap ? "min-w-[480px]" : undefined}
               />
@@ -161,7 +174,7 @@ function PersonProof({
  * followers/finished_at), not content rows -- a completely different
  * shape from every other metric, so it gets its own column set
  * (content_id doesn't exist on it at all). Column set otherwise depends
- * only on the metric, not on which person -- computed once per side. */
+ * only on the metric, not on which person -- computed once per panel. */
 function columnsForMetric(metric: string): Column<any>[] {
   if (metric === "followers") {
     return [
@@ -195,7 +208,11 @@ function columnsForMetric(metric: string): Column<any>[] {
   return [
     { key: "content_id", header: "Post", render: (r) => (
       r.content_url ? (
-        <a href={r.content_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-navy hover:underline">
+        // stopPropagation: the row itself is clickable (opens real comments
+        // in ContentDrawer) -- without this, clicking the external-link
+        // icon would open the original post AND the drawer at once.
+        <a href={r.content_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center gap-1 text-navy hover:underline">
           {r.content_id} <ExternalLink size={11} />
         </a>
       ) : r.content_id

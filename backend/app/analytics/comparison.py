@@ -120,3 +120,57 @@ def calculate_comparison_metrics(
         "percentage_changes": pct_changes,
         "comparisons": comparisons,
     }
+
+
+def _winner_n(values: dict[str, Any], direction: str) -> str | None:
+    """N-way generalization of _winner: the single best value wins. Same
+    never-fabricate contract -- no winner if the metric is neutral, if any
+    selected person's value is missing (a missing value can't lose or win),
+    or if the best value is shared (a tie)."""
+    if direction == "neutral" or not values:
+        return None
+    if any(not isinstance(v, (int, float)) for v in values.values()):
+        return None
+    pick = max if direction == "higher_better" else min if direction == "lower_better" else None
+    if pick is None:
+        return None
+    best = pick(values.values())
+    leaders = [pid for pid, v in values.items() if v == best]
+    return leaders[0] if len(leaders) == 1 else None
+
+
+def _leader_margin(values: dict[str, Any], winner: str | None) -> float | None:
+    """How far the winner is ahead of the runner-up (absolute)."""
+    if winner is None or len(values) < 2:
+        return None
+    others = [v for pid, v in values.items() if pid != winner]
+    best_other = min(others, key=lambda v: abs(values[winner] - v))
+    return round(abs(values[winner] - best_other), 4)
+
+
+def calculate_multi_comparison(
+    person_ids: list[str],
+    dfs: dict[str, Any],
+    comments: dict[str, Any],
+    followers: dict[str, int | None],
+    period_days: int,
+) -> dict[str, Any]:
+    """Compare any number of people (2..N). Returns per-person metrics keyed
+    by person_id plus, per registry metric, every person's value, the
+    winner (if defensible) and the winner's margin over the runner-up."""
+    people = {
+        pid: build_person_metrics(dfs[pid], comments[pid], followers[pid], period_days)
+        for pid in person_ids
+    }
+    comparisons: dict[str, dict[str, Any]] = {}
+    for spec in METRIC_REGISTRY:
+        values = {pid: people[pid].get(spec.key) for pid in person_ids}
+        winner = _winner_n(values, spec.direction)
+        comparisons[spec.key] = {
+            "label": spec.label,
+            "direction": spec.direction,
+            "values": values,
+            "winner": winner,
+            "leader_margin": _leader_margin(values, winner),
+        }
+    return {"people": people, "comparisons": comparisons}
