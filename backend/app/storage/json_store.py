@@ -63,8 +63,6 @@ def _settings_path() -> Path:
 
 
 DEFAULT_RUNTIME_SETTINGS = {
-    "gemini_model": "gemini-2.0-flash",
-    "nlp_enabled": False,
     "analysis_batch_size": 20,
     "data_directory": str(get_settings().data_dir),
     "date_format": "DD MMM YYYY",

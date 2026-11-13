@@ -61,13 +61,6 @@ def get_comparison(
     result = calculate_multi_comparison(ids, dfs, person_comments, followers, period_days)
     people = result["people"]
 
-    # Narrative diversity (needs narrative column, added by NLP pass if it ran)
-    def diversity(df):
-        if "narrative" not in df.columns or df.empty:
-            return None
-        counts = df["narrative"].dropna().value_counts().to_dict()
-        return eng.calculate_narrative_diversity(counts) if counts else None
-
     radar = {}
     for dim, metric_key in _RADAR_METRIC_MAP.items():
         raw = {pid: (followers[pid] if metric_key == "followers" else people[pid][metric_key]) for pid in ids}
@@ -76,7 +69,6 @@ def get_comparison(
     return ApiResponse.ok({
         "person_ids": ids,
         **result,
-        "narrative_diversity": {pid: diversity(dfs[pid]) for pid in ids},
         "activity_consistency": {pid: eng.calculate_activity_consistency(dfs[pid]) for pid in ids},
         "normalized_analytics_index": {
             "note": "Each dimension is a min-max normalization (0-100) of a deterministic "

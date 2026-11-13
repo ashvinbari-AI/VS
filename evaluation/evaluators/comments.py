@@ -1,7 +1,6 @@
 """COMMENT THEME EVALUATION (spec section 21). Human theme_ground_truth
-(via comments_ground_truth.json's `expected_theme` /
-sentiment_ground_truth.json-shaped entries with record_type="comment")
-vs the cached MODEL-CLASSIFIED comment theme."""
+(via comments_ground_truth.json's `expected_theme`) vs the cached
+keyword-classified comment theme."""
 
 from __future__ import annotations
 

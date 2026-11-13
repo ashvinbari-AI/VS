@@ -19,13 +19,12 @@ def get_timeline(
     person_ids: list[str] | None = Query(None),
     platform: str | None = None, content_type: str | None = None,
     date_from: str | None = None, date_to: str | None = None,
-    narrative: str | None = None,
     min_engagement: float | None = None,
     page: int = 1, page_size: int = 30,
 ) -> ApiResponse:
     df = get_content_df()
     df = filter_content(df, person_ids=person_ids, platform=platform, content_type=content_type,
-                         date_from=date_from, date_to=date_to, narrative=narrative,
+                         date_from=date_from, date_to=date_to,
                          min_engagement=min_engagement)
     if df.empty:
         return ApiResponse.ok({"items": [], "total": 0, "page": page, "page_size": page_size})

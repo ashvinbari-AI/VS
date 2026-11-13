@@ -377,6 +377,10 @@ async def launch_ctx(p, headless: bool, chrome_path: str | None = None) -> Brows
         viewport={"width": 1400, "height": 900},
         args=["--disable-blink-features=AutomationControlled"],
     )
+    # CHROME_PATH lets the docker image point Playwright at the system
+    # Chromium (there is no Google Chrome build for linux/arm64). An explicit
+    # --chrome-path still wins; unset outside a container => real Chrome.
+    chrome_path = chrome_path or os.environ.get("CHROME_PATH")
     if chrome_path:
         opts["executable_path"] = chrome_path
     else:

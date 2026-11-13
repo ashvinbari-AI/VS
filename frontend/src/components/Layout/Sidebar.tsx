@@ -19,8 +19,6 @@ export function Sidebar() {
     });
   };
 
-  const geminiOn = !!health?.nlp_mode?.startsWith("GEMINI NLP ENABLED");
-
   return (
     <aside
       className={`flex h-screen shrink-0 flex-col bg-gradient-to-b from-navy-700 to-navy-900 text-white shadow-nav transition-[width] duration-200 ${
@@ -33,7 +31,7 @@ export function Sidebar() {
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <div className="truncate text-sm font-bold leading-tight">Political Intelligence</div>
+            <div className="truncate text-sm font-bold leading-tight">Competitor Analysis</div>
             <div className="text-[11px] text-white/45">Social media comparison</div>
           </div>
         )}
@@ -76,7 +74,6 @@ export function Sidebar() {
         {!collapsed && (
           <div className="mb-2 px-2 text-[11px] text-white/60">
             <StatusLine label="Running locally" ok />
-            <StatusLine label={geminiOn ? "Gemini NLP on" : "Local NLP (Gemini off)"} ok={geminiOn} />
             {health?.demo_mode && (
               <div className="mt-1.5 inline-flex items-center rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold-300">
                 Demo Mode

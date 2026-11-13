@@ -13,9 +13,6 @@ const Comparison = lazy(() => import("./pages/Comparison"));
 const ActivityPage = lazy(() => import("./pages/Activity"));
 const Engagement = lazy(() => import("./pages/Engagement"));
 const Content = lazy(() => import("./pages/Content"));
-const Narratives = lazy(() => import("./pages/Narratives"));
-const SentimentPage = lazy(() => import("./pages/Sentiment"));
-const SentimentDetail = lazy(() => import("./pages/SentimentDetail"));
 const Comments = lazy(() => import("./pages/Comments"));
 const Timeline = lazy(() => import("./pages/Timeline"));
 const Explorer = lazy(() => import("./pages/Explorer"));
@@ -36,9 +33,6 @@ export default function App() {
             <Route path="/activity" element={<ActivityPage />} />
             <Route path="/engagement" element={<Engagement />} />
             <Route path="/content" element={<Content />} />
-            <Route path="/narratives" element={<Narratives />} />
-            <Route path="/sentiment" element={<SentimentPage />} />
-            <Route path="/sentiment/detail" element={<SentimentDetail />} />
             <Route path="/comments" element={<Comments />} />
             <Route path="/timeline" element={<Timeline />} />
             <Route path="/explorer" element={<Explorer />} />

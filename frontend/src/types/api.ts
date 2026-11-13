@@ -51,9 +51,6 @@ export interface ContentItem {
   scraped_at: string | null;
   last_run_id: string | null;
   engagement: number | null;
-  narrative: string | null;
-  narrative_confidence: number | null;
-  nlp_model: string | null;
 }
 
 export interface CommentItem {
@@ -69,7 +66,6 @@ export interface CommentItem {
   like_count: number | null;
   reply_count: number | null;
   status: string | null;
-  sentiment: string | null;
   theme: string | null;
   issues: string[];
 }

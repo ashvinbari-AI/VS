@@ -49,7 +49,6 @@ export default function Comments() {
                       <span>{fmtDateTime(item.commented_at)}</span>
                     </div>
                     <div className="mt-1">{item.comment_text}</div>
-                    {item.sentiment && <div className="mt-1 text-[10px] text-dark/40">Sentiment: {item.sentiment}</div>}
                   </div>
                 ))}
                 {drilldown && drilldown.items.length === 0 && <p className="text-xs text-dark/40">No matching comments.</p>}

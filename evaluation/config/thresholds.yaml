@@ -21,8 +21,6 @@ analytics:
   comparison_accuracy_pct: { pass: 100, warn: 100 } # winner/direction logic: no partial credit
 
 nlp:
-  sentiment_f1:          { pass: 0.85, warn: 0.70 }
-  narrative_f1:          { pass: 0.80, warn: 0.65 }
   comment_theme_f1:      { pass: 0.75, warn: 0.60 }
   issue_f1:              { pass: 0.80, warn: 0.65 }
 

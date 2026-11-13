@@ -1,0 +1,30 @@
+services:
+  vs-app:
+    build: .
+    image: vs-competitor-analysis:latest
+    container_name: vs-competitor-analysis
+    restart: unless-stopped
+    # Run as the host user so files written to ./data etc. stay yours.
+    user: "1003:1003"
+    ports:
+      - "4004:4004"
+    environment:
+      ACCESS_TOKEN: ${ACCESS_TOKEN:-strelema}
+      DEFAULT_PERIOD_DAYS: ${DEFAULT_PERIOD_DAYS:-30}
+      DISPLAY_TIMEZONE: ${DISPLAY_TIMEZONE:-Asia/Kolkata}
+      HOME: /tmp
+      FRONTEND_ORIGIN: http://110.225.251.220:4004
+    # Persistent state lives on the host, not in the image.
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./fb_session:/app/fb_session
+      - ./ig_session:/app/ig_session
+      - ./evaluation/reports:/app/evaluation/reports
+      - ./evaluation/regression:/app/evaluation/regression
+    shm_size: "2gb"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

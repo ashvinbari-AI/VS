@@ -78,10 +78,3 @@ def test_p90_and_top10_percent_engagement():
     assert p90 is not None and p90 >= 89
     top10 = eng.calculate_top10_percent_avg_engagement(df)
     assert top10 > p90
-
-
-def test_narrative_diversity_entropy_zero_when_single_category():
-    result = eng.calculate_narrative_diversity({"Development": 10})
-    assert result["unique_narratives"] == 1
-    assert result["entropy"] == 0
-    assert result["dominant_pct"] == 100.0

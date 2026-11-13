@@ -5,7 +5,7 @@ controlled Person A / Person B datasets with a hand-known correct answer,
 plus the edge cases the spec calls out by name (A>B, B>A, A=B, missing,
 zero, null). The comparison engine must never use an LLM for these
 decisions -- this evaluator is checking that the *Python* winner logic
-(higher/lower/equal) is right, nothing about narrative/sentiment.
+(higher/lower/equal) is right.
 """
 
 from __future__ import annotations

@@ -39,7 +39,7 @@ export default function SettingsPage() {
     <div className="max-w-2xl space-y-6">
       <Section title="Mode">
         <div className={`rounded-md px-3 py-2 text-sm font-semibold ${settings.demo_mode ? "bg-gold/20 text-dark" : "bg-navy/10 text-navy"}`}>
-          {settings.demo_mode ? "DEMO MODE" : settings.nlp_enabled && settings.gemini_api_key_configured ? "GEMINI NLP ENABLED (Comment Sentiment)" : "LOCAL ANALYSIS MODE"}
+          {settings.demo_mode ? "DEMO MODE" : "LOCAL ANALYSIS MODE"}
         </div>
         <div className="mt-3 flex gap-2">
           <button onClick={loadDemo} className="rounded-md border border-silver/80 px-3 py-1.5 text-xs font-medium hover:bg-silver/10">Load Demo Data</button>
@@ -50,27 +50,7 @@ export default function SettingsPage() {
         {status && <p className="mt-2 text-xs text-dark/60">{status}</p>}
       </Section>
 
-      <Section title="NLP / Gemini">
-        <Row label="Gemini API key">
-          <span className="text-sm">
-            {settings.gemini_api_key_configured ? "Configured (via GEMINI_API_KEY env var)" : "Not configured"}
-          </span>
-        </Row>
-        <p className="text-[11px] text-dark/40">Set GEMINI_API_KEY in the project's .env file -- never entered here, never logged.</p>
-        <Row label="Model">
-          <input className="w-56 rounded-md border border-silver/70 px-2 py-1 text-sm" value={settings.gemini_model}
-            onChange={(e) => setSettings({ ...settings, gemini_model: e.target.value })}
-            onBlur={(e) => update({ gemini_model: e.target.value })} />
-        </Row>
-        <Row label="Enable Gemini NLP (Comment Sentiment only)">
-          <Toggle checked={!!settings.nlp_enabled} onChange={(v) => update({ nlp_enabled: v })} />
-        </Row>
-        <p className="text-[11px] text-dark/40">
-          Gemini is only ever used for Comment Sentiment (post-level sentiment isn't classified at all --
-          only narrative is). Comment theme and issue extraction always run locally (transformer model if
-          configured, else the rule-based lexicon), regardless of this toggle -- disabling it also shifts
-          Comment Sentiment straight to the local model.
-        </p>
+      <Section title="Analysis">
         <Row label="Analysis batch size">
           <input type="number" className="w-24 rounded-md border border-silver/70 px-2 py-1 text-sm" value={settings.analysis_batch_size}
             onChange={(e) => setSettings({ ...settings, analysis_batch_size: Number(e.target.value) })}

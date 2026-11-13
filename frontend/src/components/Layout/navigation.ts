@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity, BarChart3, Users, MessageSquare, FileText, Compass,
-  Clock, Database, Settings as SettingsIcon, TrendingUp, Smile, Search, ClipboardCheck,
+  Activity, BarChart3, Users, MessageSquare, FileText,
+  Clock, Database, Settings as SettingsIcon, TrendingUp, Search, ClipboardCheck,
   FileBarChart,
 } from "lucide-react";
 
@@ -45,10 +45,6 @@ export const NAV_GROUPS: NavGroup[] = [
         description: "The best-performing posts and reels." },
       { to: "/content", label: "Content Mix", icon: FileText, comparison: true,
         description: "What kinds of content each person publishes." },
-      { to: "/narratives", label: "Narratives", icon: Compass, comparison: true,
-        description: "The themes each person's posts focus on (model-classified)." },
-      { to: "/sentiment", label: "Sentiment", icon: Smile, comparison: true,
-        description: "How the audience reacts in comments (model-classified)." },
       { to: "/comments", label: "Comments & Issues", icon: MessageSquare, comparison: true,
         description: "Comment volume, themes, and the public issues people raise." },
     ],
@@ -70,15 +66,14 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/evaluation", label: "Evaluation", icon: ClipboardCheck, comparison: false,
         description: "Check the app's numbers and classifications against verified data." },
       { to: "/settings", label: "Settings", icon: SettingsIcon, comparison: false,
-        description: "Theme, date format, NLP options and demo mode." },
+        description: "Theme, date format and demo mode." },
     ],
   },
 ];
 
 const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items.map((item) => ({ ...item, group: g.title })));
 
-/** Metadata for the current route; sub-routes (e.g. /sentiment/detail)
- * resolve to their parent page. */
+/** Metadata for the current route; sub-routes resolve to their parent page. */
 export function routeMeta(pathname: string): (NavItem & { group: string }) | undefined {
   return ALL_ITEMS.find((i) => pathname === i.to || pathname.startsWith(`${i.to}/`));
 }

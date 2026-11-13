@@ -1,9 +1,9 @@
 """data/analysis/nlp_cache.json -- keyed by content_id (spec section 34).
 
 If a content_id is already cached, its result is reused rather than
-re-analyzed -- the app never re-spends a Gemini call (or re-runs the
-rule-based pass) on the same content unless the caller explicitly clears
-the cache or re-requests analysis for that id.
+re-analyzed -- the app never re-runs the rule-based pass on the same
+content unless the caller explicitly clears the cache or re-requests
+analysis for that id.
 """
 
 from __future__ import annotations

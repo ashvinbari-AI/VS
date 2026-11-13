@@ -15,8 +15,6 @@ human to confirm/correct/mark-ambiguous; not built yet — see the top-level
 | `platform` | `instagram` \| `facebook` |
 | `content_type` | `post` \| `reel` \| `video` \| `photo` |
 | `caption` | copied from the real post, for the annotator's reference |
-| `human_narrative` | one of the categories in `backend/app/nlp/categories.py::DEFAULT_NARRATIVES` |
-| `human_sentiment` | `Positive` \| `Neutral` \| `Negative` \| `Mixed/Unclear` |
 | `human_topics` | free-text list, optional |
 | `human_location` | only if the post carries an explicit, real location tag — never guessed |
 | `human_issue` | list from `backend/app/nlp/categories.py::PUBLIC_ISSUES`, may be empty |
@@ -30,7 +28,8 @@ human to confirm/correct/mark-ambiguous; not built yet — see the top-level
 | `comment_id` | must match the real id in `data/processed/comments.parquet` |
 | `content_id` | the post this comment is on |
 | `comment_text` | copied from the real comment |
-| `human_sentiment` / `human_theme` / `human_issue` / `human_location` | same rules as above |
+| `human_theme` | one of the categories in `backend/app/nlp/categories.py::COMMENT_THEMES` |
+| `human_issue` / `human_location` | same rules as above |
 | `annotator` / `annotation_date` / `notes` | same as above |
 
 ## Multiple annotators

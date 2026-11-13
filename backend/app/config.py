@@ -1,9 +1,8 @@
 """
-Central settings for the Political Person Social Media Intelligence backend.
+Central settings for the Competitor Analysis backend.
 
-Everything here is local-only: paths point inside the project tree, and the
-only outbound network call this app ever makes is to Gemini, and only when
-GEMINI_API_KEY is set AND nlp_enabled is true in local settings.json.
+Everything here is local-only: paths point inside the project tree and the
+backend makes no outbound network calls of its own.
 """
 
 from __future__ import annotations
@@ -42,20 +41,6 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # -- Gemini (optional NLP only; never used for core metrics) --
-    gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.0-flash"
-
-    # -- Local, fully-offline sentiment models (optional; SENTIMENT ONLY --
-    # narrative/comment-theme/issue-extraction always stay on the keyword
-    # lexicon: Gemini is scoped to Comment Sentiment only, see
-    # app/nlp/engine.py). Needs `transformers` + `torch` installed.
-    # Devanagari-script text is routed to marathi_sentiment_model, everything
-    # else to sentiment_model -- see app/nlp/local_sentiment.py. Both unset
-    # (the default) keeps the zero-dependency lexicon, unchanged.
-    sentiment_model: str | None = None
-    marathi_sentiment_model: str | None = None
-
     # -- Data locations --
     data_dir: Path = ROOT_DIR / "data"
 
@@ -76,6 +61,14 @@ class Settings(BaseSettings):
     display_timezone: str = "Asia/Kolkata"
     frontend_origin: str = "http://127.0.0.1:5173"
     nlp_batch_size: int = 20
+
+    # -- Deployment --
+    # ACCESS_TOKEN set => every page/API call needs it (see app/security.py).
+    # Blank/unset => no gate (local dev).
+    access_token: str | None = None
+    # Built React app (frontend `npm run build`). Served by FastAPI when the
+    # folder exists, so the whole platform runs on a single port.
+    frontend_dist: Path = ROOT_DIR / "frontend" / "dist"
 
     @property
     def raw_dir(self) -> Path:

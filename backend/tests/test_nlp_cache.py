@@ -16,7 +16,7 @@ def test_put_many_does_not_deadlock(tmp_path, monkeypatch):
     done = threading.Event()
 
     def _work():
-        nlp_cache.put_many({"content_1": {"narrative": "Development"}})
+        nlp_cache.put_many({"content_1": {"theme": "Praise"}})
         done.set()
 
     t = threading.Thread(target=_work)
@@ -29,8 +29,8 @@ def test_cached_result_is_reused(tmp_path, monkeypatch):
     fake_path = tmp_path / "nlp_cache.json"
     monkeypatch.setattr(nlp_cache, "_path", lambda: fake_path)
 
-    nlp_cache.put_many({"c1": {"narrative": "Farmers", "model": "rule_based_v1"}})
+    nlp_cache.put_many({"c1": {"theme": "Question", "model": "rule_based_v1"}})
     cached = nlp_cache.get_cached("c1")
     assert cached is not None
-    assert cached["narrative"] == "Farmers"
+    assert cached["theme"] == "Question"
     assert nlp_cache.get_cached("missing") is None

@@ -24,9 +24,7 @@ One object per manually verified post.
   "shares": null,
   "caption": "...",
   "hashtags": ["Farmers"],
-  "mentions": [],
-  "expected_narrative": "Infrastructure",
-  "expected_sentiment": "Positive"
+  "mentions": []
 }
 ```
 `content_id` must match the real `content_id` from `data/processed/content.parquet`
@@ -39,7 +37,6 @@ output — a fabricated id can never match anything and will just show as "missi
   "comment_id": "ig_x_c1",
   "content_id": "ig_DdF4BgoG-jt",
   "comment_text": "...",
-  "expected_sentiment": "Positive",
   "expected_theme": "Praise",
   "expected_issues": ["Roads", "Water"]
 }
@@ -49,14 +46,6 @@ output — a fabricated id can never match anything and will just show as "missi
 ```json
 { "person": "Devendra Fadnavis", "platform": "instagram", "run_id": "run_...",
   "expected_followers": 2900000, "expected_posts_scanned": 25 }
-```
-
-## `sentiment_ground_truth.json` / `narrative_ground_truth.json`
-Same shape as the `expected_*` fields on posts/comments above, kept as their
-own files when you want a sentiment- or narrative-only annotation pass:
-```json
-{ "record_id": "ig_DdF4BgoG-jt", "record_type": "post", "human_label": "Positive",
-  "annotator": "your_name", "annotation_date": "2026-09-11", "notes": "" }
 ```
 
 ## `issues_ground_truth.json`

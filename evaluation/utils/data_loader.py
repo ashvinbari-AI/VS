@@ -33,8 +33,8 @@ def load_nlp_cache() -> dict[str, dict]:
     content_id for posts and "comment:<comment_id>" for comments -- see
     app/nlp/engine.py. Evaluating NLP against this cache (rather than
     re-running the classifier) is deliberate: spec section 57 requires NLP
-    evaluation to work even when Gemini is unreachable, using whatever was
-    already cached from a real analysis run."""
+    evaluation to use whatever was already cached from a real analysis
+    run."""
     from app.nlp import cache as nlp_cache
     return nlp_cache.load_cache()
 

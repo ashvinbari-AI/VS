@@ -20,9 +20,7 @@ import app.routers.activity as activity_module
 import app.routers.comments as comments_module
 import app.routers.comparison as comparison_module
 import app.routers.engagement as engagement_module
-import app.routers.narratives as narratives_module
 import app.routers.overview as overview_module
-import app.routers.sentiment as sentiment_module
 from app.analytics.comparison import (
     _winner_n, calculate_comparison_metrics, calculate_multi_comparison,
 )
@@ -40,39 +38,39 @@ QS = "person_ids=pa&person_ids=pb&person_ids=pc"
 # Fake data
 # --------------------------------------------------------------------------
 
-def _post(cid, pid, ctype, day, likes, comments, narrative):
+def _post(cid, pid, ctype, day, likes, comments):
     return {
         "content_id": cid, "person_id": pid, "person_name": pid.upper(), "platform": "instagram",
         "content_type": ctype, "published_at": f"2026-01-{day:02d}T10:00:00+00:00",
         "likes": likes, "comments_count": comments, "reactions_total": likes, "shares": None,
         "view_count": None, "content_url": f"https://x/{cid}", "author": pid,
-        "caption": f"caption {cid}", "narrative": narrative,
+        "caption": f"caption {cid}",
     }
 
 
 def fake_content():
     return pd.DataFrame([
-        _post("a1", "pa", "post", 1, 100, 10, "Development"),
-        _post("a2", "pa", "post", 3, 300, 30, "Welfare"),
-        _post("b1", "pb", "reel", 2, 500, 50, "Development"),
-        _post("c1", "pc", "post", 1, 10, 1, "Welfare"),
-        _post("c2", "pc", "post", 2, 20, 2, "Welfare"),
-        _post("c3", "pc", "post", 3, 30, 3, "Welfare"),
+        _post("a1", "pa", "post", 1, 100, 10),
+        _post("a2", "pa", "post", 3, 300, 30),
+        _post("b1", "pb", "reel", 2, 500, 50),
+        _post("c1", "pc", "post", 1, 10, 1),
+        _post("c2", "pc", "post", 2, 20, 2),
+        _post("c3", "pc", "post", 3, 30, 3),
     ])
 
 
 def fake_comments():
     rows = [
-        ("k1", "a1", "pa", "Positive", "Praise", ["Roads"]),
-        ("k2", "a1", "pa", "Negative", "Criticism", ["Water"]),
-        ("k3", "b1", "pb", "Positive", "Praise", ["Roads"]),
-        ("k4", "c1", "pc", "Neutral", "Question", []),
+        ("k1", "a1", "pa", "Praise", ["Roads"]),
+        ("k2", "a1", "pa", "Criticism", ["Water"]),
+        ("k3", "b1", "pb", "Praise", ["Roads"]),
+        ("k4", "c1", "pc", "Question", []),
     ]
     return pd.DataFrame([
         {"comment_id": k, "content_id": c, "person_id": p, "person_name": p.upper(),
-         "platform": "instagram", "sentiment": s, "theme": t, "issues": i,
+         "platform": "instagram", "theme": t, "issues": i,
          "commented_at": None, "comment_text": f"text {k}", "like_count": 0}
-        for k, c, p, s, t, i in rows
+        for k, c, p, t, i in rows
     ])
 
 
@@ -90,7 +88,7 @@ def patch_data(monkeypatch):
     """Every comparison router reads data through its own imported getters;
     point them all at the fake dataset (never the real data/ folder)."""
     for module in (overview_module, comparison_module, activity_module, engagement_module,
-                   narratives_module, sentiment_module, comments_module):
+                   comments_module):
         for name, fn in (("get_content_df", fake_content), ("get_comments_df", fake_comments),
                          ("get_profiles_df", fake_profiles)):
             if hasattr(module, name):
@@ -206,7 +204,7 @@ def test_leader_margin_is_gap_to_runner_up():
 # API: request validation
 # --------------------------------------------------------------------------
 
-ENDPOINTS = ["overview", "comparison", "activity", "engagement", "narratives", "sentiment", "comments"]
+ENDPOINTS = ["overview", "comparison", "activity", "engagement", "comments"]
 
 
 @pytest.mark.parametrize("endpoint", ENDPOINTS)
@@ -276,7 +274,7 @@ def test_comparison_winners_and_radar():
     radar = data["normalized_analytics_index"]["dimensions"]
     assert radar["Content volume"]["values"] == {"pa": 66.7, "pb": 33.3, "pc": 100.0}
     assert radar["Audience"]["values"] == {"pa": None, "pb": None, "pc": None}
-    assert set(data["narrative_diversity"]) == set(IDS)
+    assert "narrative_diversity" not in data
     assert set(data["activity_consistency"]) == set(IDS)
 
 
@@ -298,25 +296,6 @@ def test_engagement_pools_top_content_across_everyone():
 def test_engagement_when_nobody_has_content():
     data = ok("/api/engagement?person_ids=nobody&person_ids=nobody2")
     assert data["top_posts"] == [] and data["top_reels"] == []
-
-
-def test_narratives_table_per_person():
-    data = ok(f"/api/narratives?{QS}")
-    rows = {r["narrative"]: r["people"] for r in data["table"]}
-    assert rows["Welfare"]["pa"]["count"] == 1 and rows["Welfare"]["pa"]["pct"] == 50.0
-    assert rows["Welfare"]["pc"]["count"] == 3 and rows["Welfare"]["pc"]["pct"] == 100.0
-    assert rows["Development"]["pb"]["pct"] == 100.0
-    assert rows["Development"]["pc"]["count"] == 0
-    assert set(data["scatter"]) == set(IDS)
-
-
-def test_sentiment_per_person():
-    dist = ok(f"/api/sentiment?{QS}")["comment_sentiment"]
-    assert dist == {
-        "pa": {"Positive": 1, "Negative": 1},
-        "pb": {"Positive": 1},
-        "pc": {"Neutral": 1},
-    }
 
 
 def test_comments_per_person_and_issue_drilldown():

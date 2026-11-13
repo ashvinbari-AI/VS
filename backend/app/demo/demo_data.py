@@ -24,7 +24,7 @@ from app.models.content import NormalizedComment, NormalizedContent, ProfileSnap
 from app.storage import json_store
 from app.storage.parquet_store import write_comments, write_content, write_profiles
 
-DEMO_NARRATIVES = [
+DEMO_TOPICS = [
     "Development", "Infrastructure", "Farmers", "Healthcare", "Education",
     "Public Events", "Culture", "Party Organization",
 ]
@@ -67,7 +67,7 @@ def _gen_person(person_id: str, person_name: str, rng: random.Random,
         content_type = rng.choices(CONTENT_TYPES, weights=[35, 30, 15, 20])[0]
         eng = _rand_engagement(rng, base_engagement)
         content_id = f"demo_{person_id}_{platform}_{i}"
-        narrative_hint = rng.choice(DEMO_NARRATIVES)
+        topic_hint = rng.choice(DEMO_TOPICS)
 
         contents.append(NormalizedContent(
             person_id=person_id, person_name=person_name, platform=platform,
@@ -75,14 +75,14 @@ def _gen_person(person_id: str, person_name: str, rng: random.Random,
             content_url=f"https://example.invalid/demo/{content_id}",
             published_at=published.isoformat(timespec="seconds"),
             published_at_local=published.isoformat(timespec="seconds"),
-            caption=f"[DEMO] {narrative_hint} update #{i} for {person_name}.",
+            caption=f"[DEMO] {topic_hint} update #{i} for {person_name}.",
             likes=eng["likes"], comments_count=eng["comments"],
             shares=eng["shares"] if platform == "facebook" else None,
             reactions_total=eng["likes"],
             reactions_breakdown=None,
             view_count=rng.randint(1000, 50000) if content_type in ("video", "reel") and platform == "facebook" else None,
             followers_at_collection=base_engagement * 200,
-            hashtags=["DemoData", narrative_hint.replace(" ", "")],
+            hashtags=["DemoData", topic_hint.replace(" ", "")],
             mentions=[],
             media_url=None, media_urls=None, author=person_name,
             raw_source_file="DEMO_DATA", raw_record_id=content_id,

@@ -12,37 +12,37 @@ def test_flatten_metrics_missing_paths_are_none_not_crash():
 
 
 def test_flatten_metrics_extracts_nested_value():
-    report = {"nlp": {"sentiment": {"macro_f1": 0.87}}}  # matches run.py's actual report["nlp"]["sentiment"] shape
+    report = {"nlp": {"comment_theme": {"macro_f1": 0.87}}}  # matches run.py's actual report["nlp"]["comment_theme"] shape
     tracked = flatten_metrics(report)
-    assert tracked["nlp.sentiment_macro_f1"] == 0.87
+    assert tracked["nlp.comment_theme_macro_f1"] == 0.87
 
 
 def test_no_baseline_reports_has_baseline_false():
-    result = compare_to_baseline({"nlp.sentiment_macro_f1": 0.87}, None)
+    result = compare_to_baseline({"nlp.comment_theme_macro_f1": 0.87}, None)
     assert result["has_baseline"] is False
 
 
 def test_drop_beyond_threshold_is_flagged_regression():
-    current = {"nlp.narrative_macro_f1": 0.81}
-    baseline = {"nlp.narrative_macro_f1": 0.87}
+    current = {"nlp.issue_macro_f1": 0.81}
+    baseline = {"nlp.issue_macro_f1": 0.87}
     result = compare_to_baseline(current, baseline)
-    entry = result["metrics"]["nlp.narrative_macro_f1"]
+    entry = result["metrics"]["nlp.issue_macro_f1"]
     assert entry["status"] == "REGRESSION"
     assert entry["diff"] == -6.0  # percentage points, matching spec section 26's own worked example
 
 
 def test_small_drop_within_threshold_is_stable():
-    current = {"nlp.sentiment_macro_f1": 0.86}
-    baseline = {"nlp.sentiment_macro_f1": 0.87}
+    current = {"nlp.comment_theme_macro_f1": 0.86}
+    baseline = {"nlp.comment_theme_macro_f1": 0.87}
     result = compare_to_baseline(current, baseline)
-    assert result["metrics"]["nlp.sentiment_macro_f1"]["status"] == "STABLE"
+    assert result["metrics"]["nlp.comment_theme_macro_f1"]["status"] == "STABLE"
 
 
 def test_improvement_flagged():
-    current = {"nlp.sentiment_macro_f1": 0.95}
-    baseline = {"nlp.sentiment_macro_f1": 0.87}
+    current = {"nlp.comment_theme_macro_f1": 0.95}
+    baseline = {"nlp.comment_theme_macro_f1": 0.87}
     result = compare_to_baseline(current, baseline)
-    assert result["metrics"]["nlp.sentiment_macro_f1"]["status"] == "IMPROVED"
+    assert result["metrics"]["nlp.comment_theme_macro_f1"]["status"] == "IMPROVED"
 
 
 def test_missing_metric_in_baseline_is_not_comparable():

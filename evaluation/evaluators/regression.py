@@ -33,8 +33,6 @@ TRACKED_METRICS = {
     "analytics.engagement_all_passed": ("metrics", "engagement", "all_passed"),
     "analytics.activity_all_passed": ("metrics", "activity", "all_passed"),
     "analytics.comparison_all_passed": ("comparison", "comparison", "all_passed"),
-    "nlp.sentiment_macro_f1": ("nlp", "sentiment", "macro_f1"),
-    "nlp.narrative_macro_f1": ("nlp", "narrative", "macro_f1"),
     "nlp.comment_theme_macro_f1": ("nlp", "comment_theme", "macro_f1"),
     "nlp.issue_macro_f1": ("nlp", "issues", "macro_f1"),
 }

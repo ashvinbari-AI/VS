@@ -70,18 +70,6 @@ export function ContentDrawer({ contentId, onClose }: { contentId: string | null
               </div>
             )}
 
-            <div className="rounded-md border border-silver/60 bg-silver/5 p-3 dark:border-navy-700 dark:bg-navy-800/40">
-              <div className="mb-1 text-xs font-semibold uppercase text-dark/50 dark:text-silver/50">Model-Classified (AI)</div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <Field label="Narrative" value={c.narrative ?? "Not analyzed"} />
-              </div>
-              {c.narrative && (
-                <div className="mt-1 text-[11px] text-dark/40 dark:text-silver/40">
-                  Confidence: {c.narrative_confidence ?? "N/A"} · Model: {c.nlp_model ?? "N/A"}
-                </div>
-              )}
-            </div>
-
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-xs font-semibold uppercase text-dark/50 dark:text-silver/50">Comments ({data.comments.length})</h3>
@@ -95,7 +83,6 @@ export function ContentDrawer({ contentId, onClose }: { contentId: string | null
                     </div>
                     <div className="mt-1 text-dark dark:text-silver">{cm.comment_text ?? "N/A"}</div>
                     <div className="mt-1 flex gap-2 text-[10px] text-dark/40 dark:text-silver/40">
-                      {cm.sentiment && <span>Sentiment: {cm.sentiment}</span>}
                       {cm.theme && <span>Theme: {cm.theme}</span>}
                       {cm.issues?.length > 0 && <span>Issues: {cm.issues.join(", ")}</span>}
                     </div>

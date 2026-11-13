@@ -1,7 +1,7 @@
 """
 Shared classification-metric primitives used by every evaluator that
-compares production output against ground-truth labels (sentiment,
-narrative, comment theme, issues, duplicates, content type).
+compares production output against ground-truth labels (comment theme,
+issues, duplicates, content type).
 
 Pure Python + stdlib -- no scikit-learn/scipy dependency, so these run in
 the same environment the backend already uses. Every ratio here is

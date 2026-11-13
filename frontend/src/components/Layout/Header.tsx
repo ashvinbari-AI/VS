@@ -34,7 +34,7 @@ export function Header() {
           {meta && (
             <div className="text-[11px] font-semibold uppercase tracking-wide text-dark/40 dark:text-silver/50">{meta.group}</div>
           )}
-          <h1 className="truncate text-xl font-bold text-navy dark:text-white">{meta?.label ?? "Political Intelligence"}</h1>
+          <h1 className="truncate text-xl font-bold text-navy dark:text-white">{meta?.label ?? "Competitor Analysis"}</h1>
           {meta && <p className="truncate text-xs text-dark/55 dark:text-silver/55">{meta.description}</p>}
         </div>
         <button

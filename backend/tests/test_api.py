@@ -22,13 +22,14 @@ def test_settings_roundtrip():
     r = client.get("/api/settings")
     assert r.status_code == 200
     assert r.json()["success"] is True
-    assert "gemini_api_key_configured" in r.json()["data"]
+    assert "gemini_api_key_configured" not in r.json()["data"]
+    original = r.json()["data"]["auto_refresh"]
 
-    r2 = client.put("/api/settings", json={"nlp_enabled": True})
+    r2 = client.put("/api/settings", json={"auto_refresh": not original})
     assert r2.status_code == 200
-    assert r2.json()["data"]["nlp_enabled"] is True
+    assert r2.json()["data"]["auto_refresh"] is (not original)
     # leave it as we found it for other tests/manual runs
-    client.put("/api/settings", json={"nlp_enabled": False})
+    client.put("/api/settings", json={"auto_refresh": original})
 
 
 def test_unknown_profile_returns_structured_error():

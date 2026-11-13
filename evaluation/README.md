@@ -1,7 +1,7 @@
 # Evaluation & Validation System
 
-An independent layer that tests the production Political Person Social
-Media Intelligence app — it never modifies scraper logic, the analytics
+An independent layer that tests the production Competitor Analysis
+app — it never modifies scraper logic, the analytics
 engine, the NLP classifiers, or the React dashboard. Every evaluator here
 either calls the real `backend/app/...` functions directly (engagement,
 activity, comparison — see `evaluation/utils/backend_bridge.py`) or reads
@@ -51,13 +51,13 @@ cd backend
   silently treated as a pass.
 - Categories (**data / analytics / nlp**) are reported **separately** —
   there is deliberately no single blended "overall accuracy" number (spec
-  §30). A 100% engagement-arithmetic score and an 84% sentiment F1 measure
+  §30). A 100% engagement-arithmetic score and an 84% comment-theme F1 measure
   two completely different things.
 - **Precision / Recall / F1**: precision = of everything the model called
   X, how much really was X; recall = of everything that really was X, how
   much did the model catch; F1 = their harmonic mean. A confusion matrix
   breaks that down by exact predicted-vs-actual pairs.
-- **Model-classified**, never "truth": sentiment/narrative/theme/issue
+- **Model-classified**, never "truth": comment theme/issue
   labels the production system produced are compared against a *human's*
   label — the human label is ground truth, the model's is a prediction
   being graded, however good it is.
@@ -83,7 +83,7 @@ cd backend
   data quality, duplicate detection, engagement + engagement-rate formula,
   average/median/P90, activity metrics, comparison-engine winner logic
   (including the missing/zero/null/equal edge cases).
-- NLP evaluators (sentiment, narrative, comment theme, issue detection)
+- NLP evaluators (comment theme, issue detection)
   reading the real `nlp_cache.json` against ground truth — micro/macro
   precision/recall/F1, confusion matrices, worst-category-first sorting,
   per-record error lists.
@@ -132,5 +132,5 @@ these specifically when you want them:
   to evaluate. Re-add `evaluators/geography.py` +
   `ground_truth/geography_ground_truth.json` if Geography ever comes back.
 - NLP evaluation reads whatever's cached in `data/analysis/nlp_cache.json`
-  — it doesn't force a fresh Gemini/local-transformer call. Run **Run
+  — it doesn't re-run the classifiers itself. Run **Run
   Analysis** in the app first so there's something to compare against.

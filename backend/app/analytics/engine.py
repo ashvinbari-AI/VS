@@ -346,23 +346,6 @@ def calculate_high_performance_content(df: pd.DataFrame, percentile: float = 0.9
 # ---------------------------------------------------------------------------
 
 
-def calculate_narrative_diversity(narrative_counts: dict[str, int]) -> dict[str, Any]:
-    total = sum(narrative_counts.values())
-    if total == 0:
-        return {"unique_narratives": 0, "entropy": None, "dominant_pct": None, "top3_pct": None}
-    probs = [c / total for c in narrative_counts.values() if c > 0]
-    entropy = round(-sum(p * math.log2(p) for p in probs), 3)
-    sorted_counts = sorted(narrative_counts.values(), reverse=True)
-    dominant_pct = round(sorted_counts[0] / total * 100, 2)
-    top3_pct = round(sum(sorted_counts[:3]) / total * 100, 2)
-    return {
-        "unique_narratives": len(narrative_counts),
-        "entropy": entropy,
-        "dominant_pct": dominant_pct,
-        "top3_pct": top3_pct,
-    }
-
-
 def calculate_activity_consistency(df: pd.DataFrame) -> dict[str, float | None]:
     interval_stats = calculate_posting_interval_stats(df)
     return {

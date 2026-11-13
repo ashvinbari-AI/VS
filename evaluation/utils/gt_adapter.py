@@ -1,10 +1,9 @@
 """
 Reconciles the two ground-truth annotation styles the spec allows for
 NLP tasks: a full post/comment record carrying `expected_*` fields
-(posts_ground_truth.json / comments_ground_truth.json), and a dedicated
-single-task file (sentiment_ground_truth.json / narrative_ground_truth.json
-/ issues_ground_truth.json) shaped {"record_id", "record_type",
-"human_label"} (or "human_issues" for issues).
+(comments_ground_truth.json), and a dedicated single-task file
+(issues_ground_truth.json) shaped {"record_id", "record_type",
+"human_issues"}.
 
 Every NLP evaluator consumes only the merged, canonical shape this module
 produces -- this is the one place that reconciles the two sources. Where
@@ -24,29 +23,6 @@ def _dedupe_by_id(records: list[dict], id_key: str = "record_id") -> list[dict]:
         if rid:
             seen[rid] = r  # dict insertion order: later entries overwrite earlier ones
     return list(seen.values())
-
-
-def sentiment_ground_truth() -> list[dict]:
-    derived = []
-    for p in load_ground_truth("posts_ground_truth.json"):
-        if p.get("expected_sentiment") and p.get("content_id"):
-            derived.append({"record_id": p["content_id"], "record_type": "post",
-                             "human_label": p["expected_sentiment"]})
-    for c in load_ground_truth("comments_ground_truth.json"):
-        if c.get("expected_sentiment") and c.get("comment_id"):
-            derived.append({"record_id": c["comment_id"], "record_type": "comment",
-                             "human_label": c["expected_sentiment"]})
-    dedicated = load_ground_truth("sentiment_ground_truth.json")
-    return _dedupe_by_id(derived + dedicated)
-
-
-def narrative_ground_truth() -> list[dict]:
-    derived = []
-    for p in load_ground_truth("posts_ground_truth.json"):
-        if p.get("expected_narrative") and p.get("content_id"):
-            derived.append({"record_id": p["content_id"], "human_label": p["expected_narrative"]})
-    dedicated = load_ground_truth("narrative_ground_truth.json")
-    return _dedupe_by_id(derived + dedicated)
 
 
 def comment_theme_ground_truth() -> list[dict]:

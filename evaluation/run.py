@@ -4,7 +4,7 @@ Evaluation CLI (spec sections 53-55).
     backend\\.venv\\Scripts\\python.exe -m evaluation.run [--module MODULE] [--save-baseline] [--out NAME]
 
 Run from the project root (A:\\VS) using the BACKEND's own virtualenv --
-that's where pandas/pyarrow/pydantic (and, for NLP, transformers/torch)
+that's where pandas/pyarrow/pydantic
 already live; this package adds no separate dependency set.
 
 --module: all (default) | scraper | metrics | nlp | comparison
@@ -27,7 +27,7 @@ from evaluation.config.thresholds import status_for
 from evaluation.evaluators import (
     activity, comments as comment_theme_eval, comparison as comparison_eval,
     data_completeness, data_quality, duplicates, engagement, field_accuracy,
-    issues, narrative, regression, sentiment,
+    issues, regression,
 )
 from evaluation.utils import gt_adapter
 from evaluation.utils.data_loader import load_nlp_cache, load_production_dataframes, rows_to_dicts
@@ -92,8 +92,6 @@ def run_metrics_module() -> dict:
 
 def run_nlp_module(nlp_cache: dict) -> dict:
     return {
-        "sentiment": sentiment.evaluate_sentiment(gt_adapter.sentiment_ground_truth(), nlp_cache),
-        "narrative": narrative.evaluate_narrative(gt_adapter.narrative_ground_truth(), nlp_cache),
         "comment_theme": comment_theme_eval.evaluate_comment_theme(gt_adapter.comment_theme_ground_truth(), nlp_cache),
         "issues": issues.evaluate_issues(gt_adapter.issues_ground_truth(), nlp_cache),
     }
@@ -107,7 +105,7 @@ LIMITATIONS = [
     "Ground-truth files under evaluation/ground_truth/ start empty; any module reporting "
     "NOT_EVALUATED simply has no manually verified data yet, not a passing or failing result.",
     "NLP evaluation reads whatever is already cached in data/analysis/nlp_cache.json -- it does "
-    "not re-run Gemini or the local transformer model itself (spec section 57).",
+    "not re-run the keyword classifiers itself (spec section 57).",
     "Duplicate-detection evaluation checks production's actual rule (content_id equality) -- it "
     "cannot detect near-duplicate posts under two different ids; that is a real system limitation, "
     "not an evaluator gap.",
@@ -188,8 +186,6 @@ def build_scorecard(report: dict) -> list[dict]:
         _pct_from_cases(comparison) if comparison else None)
 
     nlp = report.get("nlp", {})
-    add("nlp", "sentiment_f1", "Sentiment Macro F1", nlp.get("sentiment", {}).get("macro_f1"))
-    add("nlp", "narrative_f1", "Narrative Macro F1", nlp.get("narrative", {}).get("macro_f1"))
     add("nlp", "comment_theme_f1", "Comment Theme Macro F1", nlp.get("comment_theme", {}).get("macro_f1"))
     add("nlp", "issue_f1", "Issue Detection Macro F1", nlp.get("issues", {}).get("macro_f1"))
 

@@ -19,7 +19,7 @@ type Row = (string | number)[];
 type Dist = Record<string, number> | undefined;
 
 /** Union of the keys across every person's distribution dict (comment
- * sentiment, theme breakdowns, ...), so a label someone doesn't have shows
+ * theme breakdowns, ...), so a label someone doesn't have shows
  * as 0 rather than being silently dropped from the table. */
 function mergeDist(dists: Dist[]): Row[] {
   const labels = Array.from(new Set(dists.flatMap((d) => Object.keys(d ?? {})))).sort();
@@ -211,17 +211,15 @@ export default function Report() {
 
   const overview = useApi<any>(() => api.get("/overview", commonParams), deps, ready);
   const engagement = useApi<any>(() => api.get("/engagement", commonParams), deps, ready);
-  const sentiment = useApi<any>(() => api.get("/sentiment", commonParams), deps, ready);
-  const narratives = useApi<any>(() => api.get("/narratives", commonParams), deps, ready);
   const comments = useApi<any>(
     () => api.get("/comments", { person_ids: filters.personIds, platform: filters.platform }),
     [filters.personIds.join(","), filters.platform],
     ready
   );
 
-  const loading = overview.loading || engagement.loading || sentiment.loading || narratives.loading || comments.loading;
-  const error = overview.error || engagement.error || sentiment.error || narratives.error || comments.error;
-  const reloadAll = () => { overview.reload(); engagement.reload(); sentiment.reload(); narratives.reload(); comments.reload(); };
+  const loading = overview.loading || engagement.loading || comments.loading;
+  const error = overview.error || engagement.error || comments.error;
+  const reloadAll = () => { overview.reload(); engagement.reload(); comments.reload(); };
 
   /** One table row: label + one formatted value per selected person. */
   const perPersonRow = (label: string, source: Record<string, any> | undefined, fmt: (b: any) => string): Row =>
@@ -267,33 +265,6 @@ export default function Report() {
   const topPostsRows = useMemo(() => topContentRows(engagement.data?.top_posts), [engagement.data]);
   const topReelsRows = useMemo(() => topContentRows(engagement.data?.top_reels), [engagement.data]);
 
-  // Sentiment covers only the comments we scraped (top-level, no replies), so it
-  // never adds up to the platform's comments_count -- show both totals side by side.
-  const sumDist = (d?: Record<string, number>) => Object.values(d ?? {}).reduce((s, n) => s + n, 0);
-  const sentimentDists: Dist[] = selected.map((p) => sentiment.data?.comment_sentiment?.[p.id]);
-  const analysed = sentimentDists.map(sumDist);
-  const commentSentimentRows = useMemo(() => {
-    const rows = mergeDist(sentimentDists);
-    if (!rows.length) return rows;
-    rows.push(["Total analysed comments", ...analysed.map((n) => fmtNum(n))]);
-    if (kpi) rows.push(perPersonRow("Platform-reported comments (incl. replies)", kpi, (k) => fmtNum(k.total_comments_count)));
-    return rows;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sentiment.data, overview.data, selected]);
-  const commentSentimentNote = kpi && analysed.some(Boolean)
-    ? `Based on ${analysed.map((n) => fmtNum(n)).join(" vs ")} scraped top-level comments. The platforms report `
-      + `${selected.map((p) => fmtNum(kpi[p.id]?.total_comments_count)).join(" vs ")} `
-      + `(that count includes replies and comments not available to scrape).`
-    : undefined;
-
-  const narrativeRows: Row[] = useMemo(() => {
-    if (!narratives.data?.analysis_available) return [];
-    return (narratives.data.table ?? []).map((r: any) => [
-      r.narrative,
-      ...selected.flatMap((p) => [fmtNum(r.people?.[p.id]?.count), fmtPct(r.people?.[p.id]?.pct)]),
-    ]);
-  }, [narratives.data, selected]);
-
   const themeDists: Dist[] = selected.map((p) => comments.data?.people?.[p.id]?.theme_breakdown);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const themeRows = useMemo(() => mergeDist(themeDists), [comments.data, selected]);
@@ -302,7 +273,6 @@ export default function Report() {
   const issueBars = (block: any) => (block?.issues ?? []).slice(0, 10).map((r: any) => ({ name: r.issue, value: r.mentions ?? 0 }));
 
   const [downloading, setDownloading] = useState(false);
-  const [narrativeInPdf, setNarrativeInPdf] = useState(true);
   const chartsRef = useRef<HTMLDivElement>(null);
 
   const kpiGroups = (metrics: [string, string][]): Group[] => kpi
@@ -317,17 +287,6 @@ export default function Report() {
     () => kpiGroups([["Likes", "total_likes"], ["Comments", "total_comments_count"], ["Engagement", "total_engagement"]]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [kpi, selected]
-  );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const commentSentGroups = useMemo(() => distGroups(selected, sentimentDists), [sentiment.data, selected]);
-  const narrativeGroups: Group[] = useMemo(
-    () => narratives.data?.analysis_available
-      ? (narratives.data.table ?? []).map((r: any) => ({
-        name: r.narrative,
-        ...Object.fromEntries(selected.map((p) => [p.id, r.people?.[p.id]?.pct ?? 0])),
-      }) as Group)
-      : [],
-    [narratives.data, selected]
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const themeGroups = useMemo(() => distGroups(selected, themeDists), [comments.data, selected]);
@@ -349,7 +308,7 @@ export default function Report() {
     let y = 50;
 
     doc.setFontSize(18);
-    doc.text("Political Intelligence -- Comparison Report", marginX, y);
+    doc.text("Competitor Analysis -- Comparison Report", marginX, y);
     y += 20;
     doc.setFontSize(10);
     doc.setTextColor(90);
@@ -442,8 +401,6 @@ export default function Report() {
     section("Engagement Summary", ["Metric", ...names], engagementRows);
     section("Top Posts (by engagement)", ["#", "Person", "Platform", "Date", "Likes", "Comments", "Engagement"], topPostsRows);
     section("Top Reels (by engagement)", ["#", "Person", "Platform", "Date", "Likes", "Comments", "Engagement"], topReelsRows);
-    section("Comment Sentiment", ["Sentiment", ...names], commentSentimentRows);
-    section("Narrative Breakdown", narrativeHead, narrativeRows);
     section("Comment Theme Breakdown", ["Theme", ...names], themeRows);
     selected.forEach((p) => {
       section(`Top Public Issues -- ${p.name}`, ["Issue", "Mentions", "% of Comments"], issuesRows(comments.data?.people?.[p.id]));
@@ -453,8 +410,6 @@ export default function Report() {
     const safe = (s: string) => s.replace(/[^a-z0-9]+/gi, "_");
     doc.save(`report_${names.map(safe).join("_vs_")}_${stamp}.pdf`);
   };
-
-  const narrativeHead = ["Narrative", ...names.flatMap((n) => [`${n} Count`, `${n} %`])];
 
   if (!ready) return <SelectPeoplePrompt />;
 
@@ -500,16 +455,6 @@ export default function Report() {
               <GroupedBars data={[g]} people={selected} />
             </ChartPanel>
           ))}
-          {commentSentGroups.length > 0 && (
-            <ChartPanel title="Comment Sentiment" note={commentSentimentNote}>
-              <GroupedBars data={commentSentGroups} people={selected} />
-            </ChartPanel>
-          )}
-          {narrativeGroups.length > 0 && (
-            <ChartPanel title="Narrative Share (% of content)" wide inPdf={narrativeInPdf} onTogglePdf={setNarrativeInPdf}>
-              <GroupedBars data={narrativeGroups} people={selected} suffix="%" angle={-25} height={300} />
-            </ChartPanel>
-          )}
           {themeGroups.length > 0 && (
             <ChartPanel title="Comment Themes" wide>
               <GroupedBars data={themeGroups} people={selected} angle={-25} height={300} />
@@ -531,8 +476,6 @@ export default function Report() {
         <Section title="Engagement Summary" head={["Metric", ...names]} rows={engagementRows} />
         <Section title="Top Posts (by engagement)" head={["#", "Person", "Platform", "Date", "Likes", "Comments", "Engagement"]} rows={topPostsRows} />
         <Section title="Top Reels (by engagement)" head={["#", "Person", "Platform", "Date", "Likes", "Comments", "Engagement"]} rows={topReelsRows} />
-        <Section title="Comment Sentiment" head={["Sentiment", ...names]} rows={commentSentimentRows} />
-        <Section title="Narrative Breakdown" head={narrativeHead} rows={narrativeRows} />
         <Section title="Comment Theme Breakdown" head={["Theme", ...names]} rows={themeRows} />
         {selected.map((p) => (
           <Section key={p.id} title={`Top Public Issues -- ${p.name}`} head={["Issue", "Mentions", "% of Comments"]} rows={issuesRows(comments.data?.people?.[p.id])} />

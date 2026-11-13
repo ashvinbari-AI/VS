@@ -8,6 +8,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
+  if (res.status === 401) {
+    // Access-token gate (public deployment): session expired or missing.
+    const next = window.location.pathname + window.location.search;
+    window.location.href = `/login?next=${encodeURIComponent(next)}`;
+    throw new Error("Access token required.");
+  }
   let body: ApiResponse<T>;
   try {
     body = await res.json();

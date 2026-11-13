@@ -35,20 +35,14 @@ export default function DataSources() {
   };
 
   const forceReanalyze = async () => {
-    // Bypasses the NLP cache (data/analysis/nlp_cache.json) so every
-    // content/comment row is re-classified from scratch instead of reusing
-    // whatever was cached before -- the only way to pick up a model change
-    // (e.g. Gemini just enabled, or SENTIMENT_MODEL just set) for rows that
-    // were already analyzed. Confirm first: on a large dataset this re-runs
-    // NLP on everything, which is slower and, if Gemini is enabled, spends
-    // Gemini quota re-classifying Comment Sentiment for rows that already
-    // had a result.
+    // Bypasses the analysis cache (data/analysis/nlp_cache.json) so every
+    // comment is re-classified from scratch instead of reusing whatever was
+    // cached before -- the way to pick up keyword-list changes for comments
+    // that were already analyzed.
     if (!window.confirm(
-      "Force re-analyze ALL content and comments, ignoring cached results?\n\n" +
-      "This re-runs narrative (posts) and sentiment/theme/issue classification (comments) " +
-      "for every row (local models/lexicon), and if Gemini NLP is enabled, re-classifies " +
-      "Comment Sentiment via Gemini too -- which uses API quota. This can take a while on a " +
-      "large dataset."
+      "Force re-analyze ALL comments, ignoring cached results?\n\n" +
+      "This re-runs theme and issue classification for every comment. " +
+      "This can take a while on a large dataset."
     )) return;
     setJobStatus("Starting forced re-analysis...");
     const { job_id } = await api.post<{ job_id: string }>("/analysis/run", { skip_nlp: false, force_reanalyze: true });
@@ -72,7 +66,7 @@ export default function DataSources() {
           <button onClick={runAnalysis} className="flex items-center gap-1 rounded-md bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy/90">
             <PlayCircle size={13} /> Run Analysis
           </button>
-          <button onClick={forceReanalyze} title="Ignore cached NLP results and re-classify everything -- use after enabling Gemini or a local sentiment model so already-analyzed rows pick it up"
+          <button onClick={forceReanalyze} title="Ignore cached results and re-classify every comment's theme and issues"
             className="flex items-center gap-1 rounded-md border border-navy/60 px-3 py-1.5 text-xs font-semibold text-navy hover:bg-navy/10">
             <RefreshCw size={13} /> Force Reanalyze
           </button>
@@ -494,7 +488,7 @@ function summarizeResult(job: any): string {
 async function runAnalysisFromToast(
   toast: ReturnType<typeof useToast>, onChanged: () => void, navigate: ReturnType<typeof useNavigate>,
 ) {
-  toast.show({ kind: "info", title: "Running analysis...", message: "Normalizing data and classifying content." });
+  toast.show({ kind: "info", title: "Running analysis...", message: "Normalizing data and classifying comments." });
   const { job_id } = await api.post<{ job_id: string }>("/analysis/run", { skip_nlp: false });
   pollAnalysis(job_id, () => {}, onChanged, toast, navigate);
 }

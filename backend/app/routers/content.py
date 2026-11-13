@@ -35,7 +35,6 @@ def list_content(
     person_ids: list[str] | None = Query(None),
     platform: str | None = None, content_type: str | None = None,
     date_from: str | None = None, date_to: str | None = None,
-    narrative: str | None = None,
     min_likes: int | None = None, min_comments: int | None = None,
     min_engagement: float | None = None, search: str | None = None,
     sort_by: str = "published_at", sort_dir: str = "desc",
@@ -43,7 +42,7 @@ def list_content(
 ) -> ApiResponse:
     df = get_content_df()
     df = filter_content(df, person_ids=person_ids, platform=platform, content_type=content_type,
-                         date_from=date_from, date_to=date_to, narrative=narrative,
+                         date_from=date_from, date_to=date_to,
                          min_likes=min_likes, min_comments=min_comments,
                          min_engagement=min_engagement, search=search)
     if df.empty:

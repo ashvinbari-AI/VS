@@ -41,7 +41,7 @@ const MODULE_OPTIONS = [
   { value: "all", label: "All Modules" },
   { value: "scraper", label: "Scraper (Completeness / Field Accuracy / Duplicates)" },
   { value: "metrics", label: "Metrics (Engagement / Activity)" },
-  { value: "nlp", label: "NLP (Sentiment / Narrative / Theme / Issues)" },
+  { value: "nlp", label: "NLP (Comment Theme / Issues)" },
   { value: "comparison", label: "Comparison Engine" },
 ];
 

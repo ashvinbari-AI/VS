@@ -1,0 +1,6 @@
+#!/bin/sh
+# Chromium wrapper used by both scrapers inside the container.
+#  --no-sandbox            : docker's seccomp profile blocks Chrome's sandbox
+#  --disable-dev-shm-usage : don't rely on a large /dev/shm
+#  --password-store=basic  : no desktop keyring; keeps cookie encryption portable
+exec /usr/bin/chromium --no-sandbox --disable-dev-shm-usage --password-store=basic "$@"

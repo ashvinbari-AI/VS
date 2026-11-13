@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/comments", tags=["comments"])
 _LIST_COLUMNS = [
     "comment_id", "content_id", "person_id", "person_name", "platform",
     "author_username", "comment_text", "commented_at", "like_count",
-    "sentiment", "theme",
+    "theme",
 ]
 
 
@@ -32,13 +32,11 @@ def _issue_breakdown(comments_df, content_df) -> list[dict]:
     total = len(comments_df)
     rows = []
     for issue, sub in exploded.groupby("issues"):
-        sentiment_counts = sub["sentiment"].dropna().value_counts().to_dict() if "sentiment" in sub else {}
         associated_people = sub["person_id"].dropna().unique().tolist() if "person_id" in sub else []
         associated_posts = sub["content_id"].dropna().unique().tolist()[:20]
         rows.append({
             "issue": issue, "mentions": len(sub),
             "percentage": round(len(sub) / total * 100, 2) if total else None,
-            "sentiment_breakdown": sentiment_counts,
             "associated_people": associated_people,
             "associated_posts": associated_posts,
         })
@@ -62,8 +60,6 @@ def get_comments(
         stats = eng.calculate_comment_statistics(c_df, content_df)
         return {
             **stats,
-            "sentiment_breakdown": c_df["sentiment"].dropna().value_counts().to_dict()
-                if "sentiment" in c_df.columns else {},
             "theme_breakdown": c_df["theme"].dropna().value_counts().to_dict()
                 if "theme" in c_df.columns else {},
             "issues": _issue_breakdown(c_df, content_df),
@@ -78,7 +74,7 @@ def get_comments(
     return ApiResponse.ok({
         "person_ids": ids,
         "analysis_available": bool(analysis_available),
-        "label": "Model-classified theme/sentiment" if analysis_available else None,
+        "label": "Keyword-classified theme" if analysis_available else None,
         "people": people,
     })
 
@@ -88,15 +84,11 @@ def list_comments(
     person_id: str = Query(...),
     platform: str | None = None,
     content_type: str | None = None,
-    sentiment: str | None = None,
     date_from: str | None = None, date_to: str | None = None,
     search: str | None = None,
     page: int = 1, page_size: int = 25,
 ) -> ApiResponse:
-    """Paginated raw comments for one person -- the drilldown behind a
-    sentiment donut slice (spec section 23/45: clicking a slice must let a
-    reviewer see the actual text behind a model-assigned label, not just
-    trust the count). content_type/date_from/date_to go through
+    """Paginated raw comments for one person. content_type/date_from/date_to go through
     filter_comments_by_post -- see app/analytics/filters.py: a comment has
     no reliable timestamp of its own, so these apply to its parent post."""
     df = get_comments_df()
@@ -106,8 +98,6 @@ def list_comments(
         df, get_content_df(), platform=platform, content_type=content_type,
         date_from=date_from, date_to=date_to,
     )
-    if not df.empty and sentiment:
-        df = df[df["sentiment"] == sentiment]
     if not df.empty and search:
         needle = search.lower()
         df = df[df["comment_text"].fillna("").str.lower().str.contains(needle, regex=False)]
@@ -142,5 +132,5 @@ def get_issue_drilldown(issue: str, person_ids: list[str] = Query(...)) -> ApiRe
     matching = comments[comments["issues"].apply(lambda v: isinstance(v, list) and issue in v)]
     matching = matching[matching["person_id"].isin(ids)]
     items = matching[["content_id", "commented_at", "person_id", "person_name", "platform",
-                       "comment_text", "sentiment"]].to_dict(orient="records") if not matching.empty else []
+                       "comment_text"]].to_dict(orient="records") if not matching.empty else []
     return ApiResponse.ok({"issue": issue, "items": items, "total": len(items)})

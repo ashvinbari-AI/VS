@@ -25,7 +25,6 @@ interface ComparisonResponse {
   comparisons: Record<string, {
     label: string; direction: string; values: PerPerson<any>; winner: string | null; leader_margin: number | null;
   }>;
-  narrative_diversity: PerPerson<any>;
   activity_consistency: PerPerson<any>;
   normalized_analytics_index: { note: string; dimensions: Record<string, { values: PerPerson<number | null> }> };
 }
@@ -132,18 +131,6 @@ function ComparisonBody({ data, people }: { data: ComparisonResponse; people: Se
         </div>
 
         <div className="space-y-4">
-          <PerPersonCard
-            title="Narrative Diversity"
-            people={people}
-            emptyMessage={people.every((p) => !data.narrative_diversity[p.id]) ? "Run analysis (NLP pass) to compute narrative diversity." : undefined}
-            columns={[
-              { header: "Unique Narratives", value: (p) => fmtNum(data.narrative_diversity[p.id]?.unique_narratives) },
-              { header: "Dominant %", value: (p) => {
-                const v = data.narrative_diversity[p.id]?.dominant_pct;
-                return v != null ? `${v}%` : "N/A";
-              } },
-            ]}
-          />
           <PerPersonCard
             title="Activity Consistency"
             people={people}

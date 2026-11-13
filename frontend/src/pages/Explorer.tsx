@@ -77,7 +77,6 @@ export default function Explorer() {
             { key: "likes", header: "Likes", render: (r) => fmtNum(r.likes), align: "right", sortable: true, sortValue: (r) => r.likes },
             { key: "comments", header: "Comments", render: (r) => fmtNum(r.comments_count), align: "right", sortable: true, sortValue: (r) => r.comments_count },
             { key: "engagement", header: "Engagement", render: (r) => fmtNum(r.engagement), align: "right", sortable: true, sortValue: (r) => r.engagement },
-            { key: "narrative", header: "Narrative", render: (r) => r.narrative ?? "—", sortable: true, sortValue: (r) => r.narrative },
           ]}
         />
         {data && data.total_pages > 1 && (

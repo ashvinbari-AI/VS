@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Political Person Social Media Intelligence -- one-command local launcher.
+Competitor Analysis -- one-command local launcher.
 
 Starts the FastAPI backend (backend/.venv) and the React/Vite frontend
 (frontend/node_modules) as two subprocesses, waits for each to actually
@@ -139,15 +139,15 @@ def main() -> None:
 
     print(f"""
 ================================================
-  Political Person Intelligence
+  Competitor Analysis
 ================================================
 
   Backend:    http://127.0.0.1:{backend_port}
   API docs:   http://127.0.0.1:{backend_port}/docs
   Frontend:   http://127.0.0.1:{frontend_port}
 
-  LOCAL MODE -- nothing leaves this machine unless
-  Gemini NLP is explicitly enabled in Settings.
+  LOCAL MODE -- the app itself sends no data off
+  this machine.
 
   Press Ctrl+C to stop both processes.
 ================================================

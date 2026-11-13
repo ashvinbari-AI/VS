@@ -9,11 +9,11 @@ from evaluation.config.thresholds import get_threshold, status_for
 
 def test_thresholds_yaml_loads_and_has_expected_categories():
     assert get_threshold("data", "completeness_pct") is not None
-    assert get_threshold("nlp", "sentiment_f1") is not None
+    assert get_threshold("nlp", "comment_theme_f1") is not None
 
 
 def test_status_for_none_value_is_not_evaluated_never_a_silent_pass():
-    assert status_for("nlp", "sentiment_f1", None) == "NOT_EVALUATED"
+    assert status_for("nlp", "comment_theme_f1", None) == "NOT_EVALUATED"
 
 
 def test_status_for_above_pass_threshold():

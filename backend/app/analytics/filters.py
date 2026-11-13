@@ -17,7 +17,6 @@ def filter_content(
     content_type: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
-    narrative: str | None = None,
     min_likes: int | None = None,
     min_comments: int | None = None,
     min_engagement: float | None = None,
@@ -38,8 +37,6 @@ def filter_content(
     if date_to:
         out = out[pd.to_datetime(out["published_at"], errors="coerce", utc=True)
                   <= pd.Timestamp(date_to, tz="UTC")]
-    if narrative and "narrative" in out.columns:
-        out = out[out["narrative"] == narrative]
     if min_likes is not None:
         out = out[out["likes"].fillna(0) >= min_likes]
     if min_comments is not None:

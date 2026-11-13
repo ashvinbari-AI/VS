@@ -2,7 +2,7 @@
 
 Kept deliberately simple (local tool, not a service) -- a single FileHandler
 per logger, appended to across runs. Never logs secrets: callers must not
-pass GEMINI_API_KEY or full .env contents into a log message.
+pass API keys or full .env contents into a log message.
 """
 
 from __future__ import annotations

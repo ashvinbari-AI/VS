@@ -31,3 +31,4 @@ evaluation/reports/*.json
 evaluation/reports/*.csv
 evaluation/regression/baseline/*.json
 evaluation/regression/current/*.json
+.venv-scrapers/

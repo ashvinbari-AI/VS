@@ -1,15 +1,27 @@
-"""comment_theme.py -- spec section 24. Classifies a comment into one theme."""
+"""comment_theme.py -- spec section 24. Classifies a comment into one theme
+using local bilingual (English + Marathi) keyword lists."""
 
 from __future__ import annotations
-
-from app.nlp import gemini_client
-from app.nlp.categories import COMMENT_THEMES
-from app.nlp.sentiment import _NEGATIVE_WORDS, _POSITIVE_WORDS
 
 _QUESTION_MARKERS = ["?", "का ", "कसे", "केव्हा", "कुठे", "कोण", "कधी"]
 _REQUEST_MARKERS = ["please", "कृपया", "पाहिजे", "need", "request", "मागणी"]
 _POLICY_MARKERS = ["योजना", "धोरण", "policy", "scheme", "budget", "अर्थसंकल्प"]
 _ATTACK_MARKERS = ["भ्रष्ट", "चोर", "नालायक", "शरम", "corrupt", "traitor", "गद्दार"]
+
+# Praise/Support vs. Criticism cues.
+_POSITIVE_WORDS = {
+    "good", "great", "excellent", "congratulations", "congrats", "proud",
+    "love", "support", "thank", "thanks", "happy", "blessed", "victory",
+    "welcome", "well done", "awesome", "wonderful", "best", "जय", "अभिनंदन",
+    "धन्यवाद", "शुभेच्छा", "स्वागत", "उत्तम", "छान", "आवडले", "प्रेम", "सुंदर",
+    "मस्त", "जय हिंद", "जय महाराष्ट्र",
+}
+_NEGATIVE_WORDS = {
+    "bad", "shame", "corrupt", "corruption", "fail", "failure", "useless",
+    "worst", "angry", "hate", "protest", "scam", "lie", "cheat", "fraud",
+    "लाज", "भ्रष्ट", "अपयश", "निषेध", "खोटे", "समस्या", "संताप", "राग", "चोर",
+    "नालायक", "बेकार",
+}
 
 
 def rule_based_theme(text: str | None) -> dict | None:
@@ -35,28 +47,5 @@ def rule_based_theme(text: str | None) -> dict | None:
     return {"theme": theme, "confidence": 0.5, "model": "rule_based_v1"}
 
 
-def gemini_theme(text: str) -> dict | None:
-    prompt = (
-        f"Classify this social-media comment into exactly one of: {', '.join(COMMENT_THEMES)}. "
-        'Respond with ONLY JSON: {"theme": "<label>", "confidence": <0-1 float>}.\n\n'
-        f"Comment: {text[:1000]}"
-    )
-    result = gemini_client.generate_json(prompt)
-    if not result or result.get("theme") not in COMMENT_THEMES:
-        return None
-    from app.config import get_settings
-    return {
-        "theme": result["theme"],
-        "confidence": float(result.get("confidence", 0.7)),
-        "model": f"gemini:{get_settings().gemini_model}",
-    }
-
-
-def classify_theme(text: str | None, use_gemini: bool) -> dict | None:
-    if not text or not text.strip():
-        return None
-    if use_gemini and gemini_client.is_configured():
-        result = gemini_theme(text)
-        if result:
-            return result
+def classify_theme(text: str | None) -> dict | None:
     return rule_based_theme(text)

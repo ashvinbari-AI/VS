@@ -209,9 +209,11 @@ def _driver(headed: bool, chrome_path: str | None = None):
     # locally -- a momentary DNS/network blip there raises before webdriver_
     # manager ever consults its own cache, which otherwise sinks an entire
     # scrape run for a hiccup that clears itself a few seconds later.
-    driver_path = None
+    # CHROMEDRIVER_PATH (set in the docker image) skips webdriver-manager,
+    # which only ships x86_64 drivers and needs network access to resolve one.
+    driver_path = os.environ.get("CHROMEDRIVER_PATH") or None
     last_err: Exception | None = None
-    for attempt in range(3):
+    for attempt in range(0 if driver_path else 3):
         try:
             driver_path = s.driver_manager().install()
             break
